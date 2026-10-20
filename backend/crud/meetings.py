@@ -1,0 +1,164 @@
+"""
+CRUD operations for meetings and transcript segments.
+
+IMPORTANT: Every read query is scoped by user_id to enforce
+data isolation between users.
+"""
+
+from sqlalchemy import select, func
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from backend.models.meeting import Meeting, MeetingStatus, TranscriptSegment
+
+
+# ── Meetings ─────────────────────────────────────────────
+
+async def create_meeting(
+    db: AsyncSession,
+    user_id: int,
+    title: str = "Untitled Meeting",
+    audio_path: str | None = None,
+) -> Meeting:
+    """Create a new meeting record."""
+    meeting = Meeting(
+        user_id=user_id,
+        title=title,
+        audio_path=audio_path,
+        status=MeetingStatus.UPLOADING,
+    )
+    db.add(meeting)
+    await db.flush()
+    await db.refresh(meeting)
+    return meeting
+
+
+async def get_meeting(
+    db: AsyncSession,
+    meeting_id: int,
+    user_id: int,
+) -> Meeting | None:
+    """
+    Fetch a meeting by id, scoped to user_id.
+    Returns None if not found or belongs to a different user.
+    """
+    result = await db.execute(
+        select(Meeting).where(
+            Meeting.id == meeting_id,
+            Meeting.user_id == user_id,
+        )
+    )
+    return result.scalar_one_or_none()
+
+
+async def list_meetings(
+    db: AsyncSession,
+    user_id: int,
+    page: int = 1,
+    page_size: int = 20,
+) -> tuple[list[Meeting], int]:
+    """
+    List meetings for a user with pagination.
+    Returns (meetings, total_count).
+    """
+    # Count total
+    count_result = await db.execute(
+        select(func.count()).select_from(Meeting).where(Meeting.user_id == user_id)
+    )
+    total = count_result.scalar_one()
+
+    # Fetch page
+    offset = (page - 1) * page_size
+    result = await db.execute(
+        select(Meeting)
+        .where(Meeting.user_id == user_id)
+        .order_by(Meeting.created_at.desc())
+        .offset(offset)
+        .limit(page_size)
+    )
+    meetings = list(result.scalars().all())
+
+    return meetings, total
+
+
+async def update_meeting_status(
+    db: AsyncSession,
+    meeting_id: int,
+    status: MeetingStatus,
+    error_message: str | None = None,
+) -> Meeting | None:
+    """
+    Update a meeting's status (used by the transcription pipeline).
+    Not scoped by user_id because background tasks call this.
+    """
+    result = await db.execute(
+        select(Meeting).where(Meeting.id == meeting_id)
+    )
+    meeting = result.scalar_one_or_none()
+    if meeting:
+        meeting.status = status
+        if error_message is not None:
+            meeting.error_message = error_message
+        await db.flush()
+        await db.refresh(meeting)
+    return meeting
+
+
+async def update_meeting_duration(
+    db: AsyncSession,
+    meeting_id: int,
+    duration_seconds: float,
+) -> None:
+    """Set the audio duration after transcription."""
+    result = await db.execute(
+        select(Meeting).where(Meeting.id == meeting_id)
+    )
+    meeting = result.scalar_one_or_none()
+    if meeting:
+        meeting.duration_seconds = duration_seconds
+        await db.flush()
+
+
+# ── Transcript Segments ──────────────────────────────────
+
+async def create_segments(
+    db: AsyncSession,
+    meeting_id: int,
+    segments: list[dict],
+) -> list[TranscriptSegment]:
+    """
+    Bulk-insert transcript segments.
+
+    Each dict in `segments` should have:
+        text, start_time, end_time, speaker (optional), language (optional)
+    """
+    db_segments = [
+        TranscriptSegment(meeting_id=meeting_id, **seg)
+        for seg in segments
+    ]
+    db.add_all(db_segments)
+    await db.flush()
+    # Refresh each to get auto-generated ids
+    for seg in db_segments:
+        await db.refresh(seg)
+    return db_segments
+
+
+async def get_segments(
+    db: AsyncSession,
+    meeting_id: int,
+    user_id: int,
+) -> list[TranscriptSegment]:
+    """
+    Get all transcript segments for a meeting, scoped by user_id.
+    Joins through Meeting to enforce ownership.
+    """
+    result = await db.execute(
+        select(TranscriptSegment)
+        .join(Meeting)
+        .where(
+            TranscriptSegment.meeting_id == meeting_id,
+            Meeting.user_id == user_id,
+        )
+        .order_by(TranscriptSegment.start_time)
+    )
+    return list(result.scalars().all())
