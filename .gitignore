@@ -1,0 +1,40 @@
+# === Secrets & Config ===
+.env
+*.env.local
+
+# === Database ===
+*.db
+*.sqlite3
+
+# === Audio Storage ===
+audio_storage/
+
+# === ChromaDB ===
+chroma_data/
+
+# === Python ===
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg-info/
+dist/
+build/
+.eggs/
+venv/
+.venv/
+
+# === Testing ===
+.pytest_cache/
+htmlcov/
+.coverage
+
+# === IDE ===
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# === OS ===
+.DS_Store
+Thumbs.db
