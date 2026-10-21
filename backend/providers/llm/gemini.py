@@ -40,9 +40,9 @@ class GeminiLLMProvider(LLMProvider):
     def __init__(self, settings: Settings | None = None):
         self.settings = settings or get_settings()
         self.base_url = "https://generativelanguage.googleapis.com/v1beta"
-        self.max_retries = 4
-        self.initial_delay = 2.0
-        self.max_delay = 15.0
+        self.max_retries = 2
+        self.initial_delay = 1.0
+        self.max_delay = 4.0
 
     @property
     def name(self) -> str:
@@ -54,7 +54,7 @@ class GeminiLLMProvider(LLMProvider):
 
     @property
     def model(self) -> str:
-        return self.settings.gemini_model or "gemini-2.5-flash"
+        return self.settings.gemini_model or "gemini-3.8-flash"
 
     def is_available(self) -> bool:
         """Check if a valid GEMINI_API_KEY is configured."""
@@ -68,7 +68,7 @@ class GeminiLLMProvider(LLMProvider):
     def _get_candidate_models(self) -> list[str]:
         """Order of Gemini models to attempt, falling back if rate limits occur."""
         preferred = [self.model]
-        candidates = ["gemini-3.8-flash", "gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash"]
+        candidates = ["gemini-3.8-flash", "gemini-flash-latest", "gemini-3.5-flash"]
         for c in candidates:
             if c not in preferred:
                 preferred.append(c)

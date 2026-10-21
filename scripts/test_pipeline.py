@@ -1,5 +1,5 @@
-"""
-DecisionAI — LLM Pipeline Interactive Test Script.
+r"""
+DecisionAI - LLM Pipeline Interactive Test Script.
 
 This script simulates a completed meeting with multi-speaker Hinglish conversation,
 triggers the LLM cleanup, summary, and structured decisions extraction,
@@ -10,12 +10,18 @@ Usage:
 """
 
 import asyncio
+import logging
 import os
 import sys
 
-# Ensure UTF-8 output on Windows consoles
+# Suppress noisy SQL logs
+logging.getLogger("sqlalchemy.engine").setLevel(logging.WARNING)
+
+# Configure safe stdout/stderr encoding on Windows
 if hasattr(sys.stdout, "reconfigure"):
-    sys.stdout.reconfigure(encoding="utf-8")
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+if hasattr(sys.stderr, "reconfigure"):
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
 
 # Ensure repository root is in python path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
@@ -27,21 +33,26 @@ from backend.models.base import Base
 from backend.models.decision import Decision
 from backend.models.meeting import Meeting, MeetingStatus, TranscriptSegment
 from backend.crud.users import create_user, get_user_by_email
-from backend.crud.meetings import create_meeting, create_segments
+from backend.crud.meetings import (
+    create_meeting,
+    create_segments,
+    update_meeting_summary,
+    update_segment_text,
+)
+from backend.crud.decisions import bulk_create_decisions
 from backend.providers.llm import get_llm_provider
-from backend.services.stt.pipeline import process_meeting_transcription
 
 
 async def main():
     print("=" * 65)
-    print("  🚀 DecisionAI — LLM Post-Processing Test & Demo")
+    print("  [DecisionAI] LLM Post-Processing Pipeline Test & Demo")
     print("=" * 65)
 
     settings = get_settings()
     llm = get_llm_provider(settings=settings)
-    print(f"[*] Active LLM Provider: {llm.name.upper()}")
-    print(f"[*] API Key Status: {'Configured' if llm.is_available() else 'Offline / Fallback mode'}")
-    print(f"[*] Model: {getattr(llm, 'model', 'default')}")
+    print(f"[*] Provider:        {llm.name.upper()}")
+    print(f"[*] API Key Status:  {'Configured' if llm.is_available() else 'Offline / Fallback mode'}")
+    print(f"[*] Target Model:    {getattr(llm, 'model', 'default')}")
     print()
 
     # Ensure tables exist
@@ -63,7 +74,7 @@ async def main():
         meeting_id = meeting.id
 
     print(f"[+] Created Meeting #{meeting_id}: '{meeting.title}'")
-    print(f"    Initial Status: {meeting.status.value}")
+    print(f"    Initial Status: [{meeting.status.value.upper()}]")
 
     # 2. Simulate multi-speaker Hindi/English/Hinglish conversation segments
     sample_segments = [
@@ -119,23 +130,23 @@ async def main():
         },
     ]
 
-    print(f"\n[*] Inserting {len(sample_segments)} conversation segments (Hindi + English + Hinglish)...")
+    print(f"\n[*] Storing {len(sample_segments)} conversation segments (Hindi + English + Hinglish)...")
     async with async_session_factory() as db:
         created_segs = await create_segments(db, meeting_id, sample_segments)
         await db.commit()
 
     # 3. Simulate meeting finish -> Trigger LLM processing
-    print(f"\n[*] Simulating meeting completion (Status: 'processing')...")
+    print(f"[*] Simulating meeting completion -> Setting status to [PROCESSING]...")
     async with async_session_factory() as db:
         res = await db.execute(select(Meeting).where(Meeting.id == meeting_id))
         m = res.scalar_one()
         m.status = MeetingStatus.PROCESSING
         await db.commit()
 
-    print("[*] Running LLM post-processing:")
-    print("    • (1) Domain Glossary cleanup (preserving raw_text and natural Hinglish)")
-    print("    • (2) Executive summary generation")
-    print("    • (3) Structured extraction: decisions, action items, client requests")
+    print("[*] Running LLM post-processing pipeline:")
+    print("    - Task 1: Domain Glossary cleanup (preserving raw_text and conversational Hinglish)")
+    print("    - Task 2: Executive meeting summary generation")
+    print("    - Task 3: Structured extraction of decisions, action items, and client requests")
 
     segment_dicts = [
         {
@@ -157,10 +168,6 @@ async def main():
 
     # 4. Save results to Database
     async with async_session_factory() as db:
-        # Update cleaned text in DB
-        from backend.crud.meetings import update_segment_text, update_meeting_summary
-        from backend.crud.decisions import bulk_create_decisions
-
         for cleaned in ai_result.cleaned_segments:
             await update_segment_text(db, cleaned.id, cleaned.cleaned_text)
 
@@ -179,23 +186,23 @@ async def main():
 
     # 5. Print Results
     print("\n" + "=" * 65)
-    print("  📋 RESULTS SUMMARY")
+    print("  RESULTS SUMMARY")
     print("=" * 65)
 
-    print("\n✨ Executive Summary:")
+    print("\n[EXECUTIVE SUMMARY]")
     print("-" * 50)
     print(ai_result.summary)
 
-    print("\n🎯 Extracted Decisions, Action Items & Client Requests:")
+    print("\n[EXTRACTED DECISIONS, ACTION ITEMS & CLIENT REQUESTS]")
     print("-" * 50)
     for idx, d in enumerate(ai_result.decisions, 1):
         ts_sec = d.timestamp_ms / 1000.0
         time_str = f"{int(ts_sec // 60):02d}:{int(ts_sec % 60):02d}"
-        status_symbol = "✅" if d.status == "accepted" else ("❌" if d.status == "rejected" else "⏳")
-        print(f" {idx}. [{d.type.upper()}] {status_symbol} {d.status.upper()} (at {time_str})")
+        status_tag = f"[{d.status.upper()}]"
+        print(f" {idx}. [{d.type.upper()}] {status_tag} (at {time_str})")
         print(f"    \"{d.text}\"")
 
-    print("\n📝 Glossary-Cleaned Transcript (Raw vs Cleaned):")
+    print("\n[GLOSSARY-CLEANED TRANSCRIPT (RAW vs CLEANED)]")
     print("-" * 50)
     async with async_session_factory() as db:
         seg_res = await db.execute(
@@ -205,11 +212,12 @@ async def main():
         )
         for s in seg_res.scalars().all():
             print(f"[{s.speaker}]:")
-            print(f"  • Raw:     {s.raw_text}")
-            print(f"  • Cleaned: {s.text}")
+            print(f"  * Raw:     {s.raw_text}")
+            print(f"  * Cleaned: {s.text}")
 
     print("\n" + "=" * 65)
-    print(f"  🌐 View in Browser: http://localhost:8000/meetings/{meeting_id}")
+    print(f"  Final Meeting Status: [READY]")
+    print(f"  View in Browser:      http://localhost:8000/meetings/{meeting_id}")
     print("=" * 65)
 
     await engine.dispose()
