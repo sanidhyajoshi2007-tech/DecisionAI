@@ -93,16 +93,17 @@ async def transcribe_channel(
     speaker: str,
     glossary: list[str] | None = None,
     chunk_seconds: int = 60,
-) -> list[TranscriptionSegment]:
+) -> tuple[list[TranscriptionSegment], str | None]:
     """
-    Transcribe a single audio channel in chunks and return all segments.
+    Transcribe a single audio channel in chunks and return (segments, error_msg).
     """
     if not is_valid_wav(audio_path):
         logger.info(f"Skipping channel '{speaker}': no valid audio frames found.")
-        return []
+        return [], None
 
     chunks = chunk_wav(audio_path, chunk_seconds=chunk_seconds)
     all_segments: list[TranscriptionSegment] = []
+    error_msg: str | None = None
 
     for chunk_path, offset_ms in chunks:
         try:
@@ -114,6 +115,7 @@ async def transcribe_channel(
             )
             all_segments.extend(result.segments)
         except Exception as e:
+            error_msg = str(e)
             logger.error(f"Error transcribing {speaker} chunk {chunk_path}: {e}", exc_info=True)
         finally:
             # Clean up temp chunks (leave original file intact)
@@ -123,7 +125,7 @@ async def transcribe_channel(
                 except Exception:
                     pass
 
-    return all_segments
+    return all_segments, error_msg
 
 
 async def process_meeting_transcription(
@@ -140,7 +142,7 @@ async def process_meeting_transcription(
     2. Transcribes both Tab (Participants) and Mic (You) channels in chunks.
     3. Merges segments from both channels and sorts chronologically by start_ms.
     4. Persists segments to SQLite database.
-    5. Sets meeting status to READY (or ERROR on unhandled failure).
+    5. Sets meeting status to READY (or ERROR on failure).
     """
     settings = settings or get_settings()
     session_factory = session_factory or async_session_factory
@@ -172,7 +174,7 @@ async def process_meeting_transcription(
             glossary=glossary,
         )
 
-        tab_segments, mic_segments = await asyncio.gather(tab_task, mic_task)
+        (tab_segments, tab_err), (mic_segments, mic_err) = await asyncio.gather(tab_task, mic_task)
 
         # Merge segments from both channels by timestamp (start_ms)
         merged_segments = tab_segments + mic_segments
@@ -182,6 +184,14 @@ async def process_meeting_transcription(
             f"[STT Pipeline] Meeting #{meeting_id}: Captured {len(tab_segments)} tab segments, "
             f"{len(mic_segments)} mic segments. Total merged: {len(merged_segments)}"
         )
+
+        # If zero segments were produced and an error occurred on either channel, record it
+        if not merged_segments and (tab_err or mic_err):
+            err_str = tab_err or mic_err or "Unknown transcription error"
+            async with session_factory() as db:
+                await update_meeting_status(db, meeting_id, MeetingStatus.ERROR, error_message=err_str)
+                await db.commit()
+            return
 
         # Convert to dict format for database insertion
         db_segments_data = [seg.to_dict() for seg in merged_segments]

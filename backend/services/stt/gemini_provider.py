@@ -129,7 +129,10 @@ class GeminiTranscriptionProvider(TranscriptionProvider):
             "3. Return ONLY the JSON object. Do not wrap in markdown or explanation."
         )
 
-        url = f"{self.base_url}/models/{self.model}:generateContent?key={self.api_key}"
+        models_to_try = [self.model]
+        for fallback in ["gemini-3.5-flash", "gemini-3.5-transcribe", "gemini-3.8-flash"]:
+            if fallback not in models_to_try:
+                models_to_try.append(fallback)
 
         payload = {
             "contents": [
@@ -151,14 +154,33 @@ class GeminiTranscriptionProvider(TranscriptionProvider):
             },
         }
 
+        data = None
+        last_error = None
         async with httpx.AsyncClient(timeout=90.0) as client:
-            resp = await client.post(url, json=payload)
-            if resp.status_code != 200:
-                logger.error(f"Gemini API error ({resp.status_code}): {resp.text}")
-                raise RuntimeError(
-                    f"Gemini API error ({resp.status_code}): {resp.text}"
-                )
-            data = resp.json()
+            for candidate_model in models_to_try:
+                url = f"{self.base_url}/models/{candidate_model}:generateContent?key={self.api_key}"
+                try:
+                    resp = await client.post(url, json=payload)
+                    if resp.status_code == 200:
+                        data = resp.json()
+                        break
+                    elif resp.status_code in (503, 429, 404):
+                        logger.warning(
+                            f"Model '{candidate_model}' returned {resp.status_code}. "
+                            f"Trying fallback model..."
+                        )
+                        last_error = f"Gemini API error ({resp.status_code}): {resp.text}"
+                        continue
+                    else:
+                        resp_text = resp.text
+                        logger.error(f"Gemini API error ({resp.status_code}): {resp_text}")
+                        raise RuntimeError(f"Gemini API error ({resp.status_code}): {resp_text}")
+                except httpx.RequestError as req_err:
+                    last_error = f"Request error: {req_err}"
+                    continue
+
+        if data is None:
+            raise RuntimeError(last_error or "All candidate Gemini models failed")
 
         # Extract generated content text
         raw_text = ""

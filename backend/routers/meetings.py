@@ -330,6 +330,22 @@ async def view_meeting_page(
             </div>
         </div>
         """
+    elif meeting and (meeting.status == MeetingStatus.ERROR or meeting.error_message):
+        err = meeting.error_message or "Transcription failed"
+        transcript_html = f"""
+        <div style="background: rgba(239, 68, 68, 0.08); border: 1px solid rgba(239, 68, 68, 0.28); border-radius: 12px; padding: 18px 20px; margin-top: 24px; margin-bottom: 24px; color: #fca5a5; font-size: 0.88rem;">
+            <div style="font-weight: 600; color: #f87171; margin-bottom: 6px; display: flex; align-items: center; gap: 8px;">
+                <span>⚠️</span> <span>Transcription Error</span>
+            </div>
+            <div style="line-height: 1.5; color: #e2e8f0; font-family: monospace; font-size: 0.82rem; word-break: break-all; background: rgba(0,0,0,0.3); padding: 10px; border-radius: 6px; margin-top: 8px;">{err}</div>
+        </div>
+        """
+    else:
+        transcript_html = """
+        <div style="background: rgba(255, 255, 255, 0.02); border: 1px dashed rgba(255, 255, 255, 0.1); border-radius: 12px; padding: 24px 20px; margin-top: 24px; margin-bottom: 24px; text-align: center; color: #94a3b8; font-size: 0.88rem;">
+            No speech transcript available for this recording yet.
+        </div>
+        """
 
     empty_notice = ""
     if duration_val <= 0.0:
