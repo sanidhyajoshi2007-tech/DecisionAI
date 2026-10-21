@@ -47,7 +47,7 @@ async def test_create_meeting(client):
         # Create meeting
         meeting = await create_meeting(db, user_id=user.id, title="Sprint Planning")
         assert meeting.title == "Sprint Planning"
-        assert meeting.status == MeetingStatus.UPLOADING
+        assert meeting.status in (MeetingStatus.RECORDING, MeetingStatus.UPLOADING)
         assert meeting.user_id == user.id
 
         # Retrieve it
@@ -115,15 +115,20 @@ async def test_meeting_status_transitions():
         user = await create_user(db, email="status@test.com", name="Status User")
         meeting = await create_meeting(db, user_id=user.id)
 
-        assert meeting.status == MeetingStatus.UPLOADING
+        assert meeting.status in (MeetingStatus.RECORDING, MeetingStatus.UPLOADING)
 
-        # Transition: uploading → processing
+        # Transition: recording/uploading → processing
         updated = await update_meeting_status(db, meeting.id, MeetingStatus.PROCESSING)
         assert updated.status == MeetingStatus.PROCESSING
 
         # Transition: processing → ready
         updated = await update_meeting_status(db, meeting.id, MeetingStatus.READY)
         assert updated.status == MeetingStatus.READY
+
+        # Transition: ready → failed
+        updated = await update_meeting_status(db, meeting.id, MeetingStatus.FAILED, error_message="Failed test")
+        assert updated.status == MeetingStatus.FAILED
+        assert updated.error_message == "Failed test"
 
         await db.commit()
 

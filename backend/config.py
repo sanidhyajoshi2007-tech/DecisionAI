@@ -85,6 +85,7 @@ class Settings(BaseSettings):
     chroma_persist_dir: str = "chroma_data"
 
     # ── LLM ──
+    llm_provider: str = "gemini"
 
     # ── CORS ──
     cors_origins: str = "http://localhost:8000"

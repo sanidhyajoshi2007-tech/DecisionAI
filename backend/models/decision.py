@@ -38,6 +38,7 @@ class Decision(Base):
     )
     text: Mapped[str] = mapped_column(Text, nullable=False)
     type: Mapped[str] = mapped_column(String(50), default="decision", index=True)
+    status: Mapped[str] = mapped_column(String(50), default="accepted", nullable=True)
     timestamp_ms: Mapped[int] = mapped_column(Integer, default=0)
 
     created_at: Mapped[datetime] = mapped_column(

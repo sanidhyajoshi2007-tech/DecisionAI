@@ -27,6 +27,7 @@ class MeetingResponse(BaseModel):
     language: str | None = "en"
     audio_path: str | None = None
     duration_seconds: float | None = None
+    summary: str | None = None
     error_message: str | None = None
     created_at: datetime
     updated_at: datetime

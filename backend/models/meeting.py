@@ -28,9 +28,11 @@ class MeetingStatus(str, enum.Enum):
     Lifecycle states for a meeting.
     Using str mixin so it serializes to JSON as a string.
     """
-    UPLOADING = "uploading"
+    RECORDING = "recording"
     PROCESSING = "processing"
     READY = "ready"
+    FAILED = "failed"
+    UPLOADING = "uploading"
     ERROR = "error"
 
 
@@ -45,7 +47,7 @@ class Meeting(Base):
     title: Mapped[str] = mapped_column(String(500), default="Untitled Meeting")
     status: Mapped[MeetingStatus] = mapped_column(
         Enum(MeetingStatus),
-        default=MeetingStatus.UPLOADING,
+        default=MeetingStatus.RECORDING,
     )
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     ended_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
@@ -54,8 +56,10 @@ class Meeting(Base):
     # Relative path from AUDIO_STORAGE_DIR
     audio_path: Mapped[str | None] = mapped_column(String(1000), nullable=True)
     duration_seconds: Mapped[float | None] = mapped_column(Float, nullable=True)
-    # Optional error message when status == ERROR
+    summary: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Optional error message when status == FAILED / ERROR
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+
 
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),

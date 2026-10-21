@@ -16,6 +16,7 @@ async def create_decision(
     meeting_id: int,
     text: str,
     type: str = "decision",
+    status: str = "accepted",
     timestamp_ms: int | None = None,
 ) -> Decision:
     """Create a new decision record associated with a meeting."""
@@ -23,12 +24,37 @@ async def create_decision(
         meeting_id=meeting_id,
         text=text,
         type=type,
-        timestamp_ms=timestamp_ms,
+        status=status,
+        timestamp_ms=timestamp_ms or 0,
     )
     db.add(decision)
     await db.flush()
     await db.refresh(decision)
     return decision
+
+
+async def bulk_create_decisions(
+    db: AsyncSession,
+    meeting_id: int,
+    items: list[dict],
+) -> list[Decision]:
+    """Bulk insert extracted decisions, action items, and client requests."""
+    db_items = [
+        Decision(
+            meeting_id=meeting_id,
+            text=item["text"],
+            type=item.get("type", "decision"),
+            status=item.get("status", "accepted"),
+            timestamp_ms=item.get("timestamp_ms", 0),
+        )
+        for item in items
+    ]
+    db.add_all(db_items)
+    await db.flush()
+    for d in db_items:
+        await db.refresh(d)
+    return db_items
+
 
 
 async def get_decision(

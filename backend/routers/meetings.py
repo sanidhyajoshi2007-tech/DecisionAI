@@ -84,6 +84,7 @@ async def create_new_meeting(
         db=db,
         user_id=current_user.id,
         title=title,
+        status=MeetingStatus.RECORDING,
     )
     return MeetingResponse.model_validate(meeting)
 
@@ -236,16 +237,16 @@ async def finish_meeting_recording(
     tab_path, mic_path, duration = finish_writer(meeting_id, settings)
 
     if not meeting:
-        meeting = await create_meeting(db, user_id=current_user.id, title="Google Meet Call")
+        meeting = await create_meeting(db, user_id=current_user.id, title="Google Meet Call", status=MeetingStatus.PROCESSING)
 
-    meeting.status = MeetingStatus.READY
-    meeting.duration_seconds = duration
-    meeting.audio_path = f"{meeting_id}_tab.wav"
-    await db.commit()
-    await db.refresh(meeting)
-
-    # Launch background transcription task if audio files exist
+    # Launch background transcription & LLM post-processing task if audio files exist
     if duration > 0.0 or (tab_path.exists() and tab_path.stat().st_size > 44):
+        meeting.status = MeetingStatus.PROCESSING
+        meeting.duration_seconds = duration
+        meeting.audio_path = f"{meeting_id}_tab.wav"
+        await db.commit()
+        await db.refresh(meeting)
+
         from backend.services.stt import process_meeting_transcription
         background_tasks.add_task(
             process_meeting_transcription,
@@ -255,9 +256,15 @@ async def finish_meeting_recording(
             settings=settings,
             glossary=settings.glossary_list,
         )
+    else:
+        meeting.status = MeetingStatus.READY
+        meeting.duration_seconds = duration
+        meeting.audio_path = f"{meeting_id}_tab.wav"
+        await db.commit()
+        await db.refresh(meeting)
 
     return {
-        "status": "ready",
+        "status": meeting.status.value,
         "meeting_id": meeting_id,
         "title": meeting.title,
         "duration_seconds": round(duration, 2),
@@ -325,6 +332,7 @@ async def view_meeting_page(
 
     from sqlalchemy import select
     from backend.models.meeting import TranscriptSegment
+    from backend.models.decision import Decision
 
     seg_res = await db.execute(
         select(TranscriptSegment)
@@ -332,6 +340,67 @@ async def view_meeting_page(
         .order_by(TranscriptSegment.start_ms)
     )
     segments = list(seg_res.scalars().all())
+
+    dec_res = await db.execute(
+        select(Decision)
+        .where(Decision.meeting_id == meeting_id)
+        .order_by(Decision.timestamp_ms)
+    )
+    decisions = list(dec_res.scalars().all())
+
+    summary_html = ""
+    if meeting and meeting.summary:
+        summary_html = f"""
+        <div style="background: rgba(99, 102, 241, 0.08); border: 1px solid rgba(99, 102, 241, 0.25); border-radius: 14px; padding: 20px 22px; margin-top: 24px; margin-bottom: 24px;">
+            <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 10px;">
+                <span style="font-size: 1.2rem;">✨</span>
+                <span style="font-size: 1rem; font-weight: 700; color: #a5b4fc;">Meeting Summary & Key Takeaways</span>
+            </div>
+            <div style="font-size: 0.92rem; color: #e2e8f0; line-height: 1.6; white-space: pre-wrap;">{meeting.summary}</div>
+        </div>
+        """
+
+    decisions_html = ""
+    if decisions:
+        item_rows = []
+        for d in decisions:
+            type_label = (d.type or "decision").replace("_", " ").title()
+            type_bg = "rgba(56, 189, 248, 0.15)" if d.type == "decision" else ("rgba(244, 114, 182, 0.15)" if d.type == "action_item" else "rgba(251, 191, 36, 0.15)")
+            type_color = "#38bdf8" if d.type == "decision" else ("#f472b6" if d.type == "action_item" else "#fbbf24")
+
+            status_val = d.status or "accepted"
+            status_bg = "rgba(34, 197, 94, 0.15)" if status_val == "accepted" else ("rgba(239, 68, 68, 0.15)" if status_val == "rejected" else "rgba(245, 158, 11, 0.15)")
+            status_color = "#4ade80" if status_val == "accepted" else ("#f87171" if status_val == "rejected" else "#fbbf24")
+
+            ts_sec = (d.timestamp_ms or 0) / 1000.0
+            ts_min = int(ts_sec // 60)
+            ts_s = int(ts_sec % 60)
+            time_str = f"{ts_min:02d}:{ts_s:02d}"
+
+            item_rows.append(f"""
+            <div style="background: rgba(255, 255, 255, 0.02); border: 1px solid rgba(255, 255, 255, 0.06); border-radius: 10px; padding: 12px 16px; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; gap: 14px;">
+                <div style="display: flex; flex-direction: column; gap: 4px; flex: 1;">
+                    <div style="display: flex; align-items: center; gap: 8px;">
+                        <span style="font-size: 0.72rem; font-weight: 700; background: {type_bg}; color: {type_color}; padding: 2px 8px; border-radius: 6px; text-transform: uppercase;">{type_label}</span>
+                        <span style="font-size: 0.72rem; font-weight: 600; background: {status_bg}; color: {status_color}; padding: 2px 8px; border-radius: 6px; text-transform: uppercase;">{status_val}</span>
+                        <span style="font-size: 0.72rem; color: #64748b; font-family: monospace;">⏱️ {time_str}</span>
+                    </div>
+                    <div style="font-size: 0.9rem; color: #f1f5f9; line-height: 1.4; margin-top: 2px;">{d.text}</div>
+                </div>
+            </div>
+            """)
+
+        decisions_html = f"""
+        <div style="margin-top: 24px; margin-bottom: 24px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                <h3 style="font-size: 1.05rem; font-weight: 600; color: #f1f5f9; display: flex; align-items: center; gap: 8px;">
+                    <span>🎯 Decisions, Action Items & Client Requests</span>
+                    <span style="font-size: 0.75rem; color: #94a3b8; font-weight: 400;">({len(decisions)} extracted)</span>
+                </h3>
+            </div>
+            {"".join(item_rows)}
+        </div>
+        """
 
     transcript_html = ""
     if segments:
@@ -371,22 +440,32 @@ async def view_meeting_page(
             {"".join(segment_items)}
         </div>
         """
+    elif meeting and meeting.status == MeetingStatus.RECORDING:
+        transcript_html = """
+        <div style="background: rgba(239, 68, 68, 0.08); border: 1px solid rgba(239, 68, 68, 0.25); border-radius: 12px; padding: 18px 20px; margin-top: 24px; margin-bottom: 24px; display: flex; align-items: center; gap: 12px; color: #fca5a5; font-size: 0.88rem;">
+            <span style="font-size: 1.4rem;">🔴</span>
+            <div>
+                <div style="font-weight: 600; color: #f87171; margin-bottom: 2px;">Live Audio Recording in Progress...</div>
+                <div style="color: #94a3b8;">Capturing audio streams from Google Meet call. Click 'Stop Recording' in the extension popup when finished.</div>
+            </div>
+        </div>
+        """
     elif meeting and meeting.status == MeetingStatus.PROCESSING:
         transcript_html = """
         <div style="background: rgba(56, 189, 248, 0.08); border: 1px solid rgba(56, 189, 248, 0.25); border-radius: 12px; padding: 18px 20px; margin-top: 24px; margin-bottom: 24px; display: flex; align-items: center; gap: 12px; color: #7dd3fc; font-size: 0.88rem;">
             <span style="font-size: 1.4rem;">⏳</span>
             <div>
-                <div style="font-weight: 600; color: #38bdf8; margin-bottom: 2px;">Transcribing Meeting Audio in Background...</div>
-                <div style="color: #94a3b8;">Processing multi-speaker speech with timestamp alignment (Hindi, English & Hinglish). Please refresh in a few moments.</div>
+                <div style="font-weight: 600; color: #38bdf8; margin-bottom: 2px;">Processing Meeting (Transcription & AI Extraction)...</div>
+                <div style="color: #94a3b8;">Running multi-speaker speech transcription, glossary cleanup, executive summary, and structured decisions extraction. Please refresh in a few moments.</div>
             </div>
         </div>
         """
-    elif meeting and (meeting.status == MeetingStatus.ERROR or meeting.error_message):
-        err = meeting.error_message or "Transcription failed"
+    elif meeting and (meeting.status in (MeetingStatus.FAILED, MeetingStatus.ERROR) or meeting.error_message):
+        err = meeting.error_message or "Meeting processing failed"
         transcript_html = f"""
         <div style="background: rgba(239, 68, 68, 0.08); border: 1px solid rgba(239, 68, 68, 0.28); border-radius: 12px; padding: 18px 20px; margin-top: 24px; margin-bottom: 24px; color: #fca5a5; font-size: 0.88rem;">
             <div style="font-weight: 600; color: #f87171; margin-bottom: 6px; display: flex; align-items: center; gap: 8px;">
-                <span>⚠️</span> <span>Transcription Error</span>
+                <span>⚠️</span> <span>Processing Error</span>
             </div>
             <div style="line-height: 1.5; color: #e2e8f0; font-family: monospace; font-size: 0.82rem; word-break: break-all; background: rgba(0,0,0,0.3); padding: 10px; border-radius: 6px; margin-top: 8px;">{err}</div>
         </div>
@@ -811,6 +890,10 @@ async def view_meeting_page(
                 <span id="micVolVal" style="min-width: 48px; text-align: right;">100%</span>
             </div>
         </div>
+
+        {summary_html}
+
+        {decisions_html}
 
         {transcript_html}
 
@@ -1279,6 +1362,7 @@ async def create_meeting_decision(
         meeting_id=meeting_id,
         text=payload.text,
         type=payload.type,
+        status=payload.status,
         timestamp_ms=payload.timestamp_ms,
     )
     return DecisionResponse.model_validate(decision)

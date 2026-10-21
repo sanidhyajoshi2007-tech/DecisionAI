@@ -28,7 +28,7 @@ async def test_upload_audio_success(client: AsyncClient):
 
     assert data["id"] > 0
     assert data["title"] == "Q3 Planning Meeting"
-    assert data["status"] == "uploading"
+    assert data["status"] in ("uploading", "recording")
     assert data["user_id"] == 1  # Dev user
     assert data["audio_path"] == f"1/{data['id']}.webm"
     assert data["duration_seconds"] is None

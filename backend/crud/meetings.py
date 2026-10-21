@@ -18,18 +18,37 @@ async def create_meeting(
     user_id: int,
     title: str = "Untitled Meeting",
     audio_path: str | None = None,
+    status: MeetingStatus = MeetingStatus.RECORDING,
 ) -> Meeting:
     """Create a new meeting record."""
     meeting = Meeting(
         user_id=user_id,
         title=title,
         audio_path=audio_path,
-        status=MeetingStatus.UPLOADING,
+        status=status,
     )
     db.add(meeting)
     await db.flush()
     await db.refresh(meeting)
     return meeting
+
+
+async def update_meeting_summary(
+    db: AsyncSession,
+    meeting_id: int,
+    summary: str,
+) -> Meeting | None:
+    """Update a meeting's summary text."""
+    result = await db.execute(
+        select(Meeting).where(Meeting.id == meeting_id)
+    )
+    meeting = result.scalar_one_or_none()
+    if meeting:
+        meeting.summary = summary
+        await db.flush()
+        await db.refresh(meeting)
+    return meeting
+
 
 
 async def get_meeting(
@@ -218,3 +237,34 @@ async def get_segments(
         .order_by(TranscriptSegment.start_time)
     )
     return list(result.scalars().all())
+
+
+async def get_segments_by_meeting_id(
+    db: AsyncSession,
+    meeting_id: int,
+) -> list[TranscriptSegment]:
+    """Get all segments for a meeting directly (internal pipeline use)."""
+    result = await db.execute(
+        select(TranscriptSegment)
+        .where(TranscriptSegment.meeting_id == meeting_id)
+        .order_by(TranscriptSegment.start_time)
+    )
+    return list(result.scalars().all())
+
+
+async def update_segment_text(
+    db: AsyncSession,
+    segment_id: int,
+    cleaned_text: str,
+) -> None:
+    """Update text while preserving raw_text."""
+    result = await db.execute(
+        select(TranscriptSegment).where(TranscriptSegment.id == segment_id)
+    )
+    seg = result.scalar_one_or_none()
+    if seg:
+        if not seg.raw_text:
+            seg.raw_text = seg.text
+        seg.text = cleaned_text
+        await db.flush()
+
