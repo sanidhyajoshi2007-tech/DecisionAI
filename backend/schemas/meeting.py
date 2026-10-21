@@ -47,8 +47,11 @@ class TranscriptSegmentResponse(BaseModel):
     meeting_id: int
     speaker: str | None = None
     text: str
+    raw_text: str | None = None
     start_time: float
     end_time: float
+    start_ms: int | None = None
+    end_ms: int | None = None
     language: str | None = None
 
     model_config = {"from_attributes": True}

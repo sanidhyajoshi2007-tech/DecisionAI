@@ -55,6 +55,18 @@
             <input type="text" id="meetingTitle" placeholder="e.g. Sprint Planning, Client Review" value="Google Meet Call">
         </div>
 
+        <!-- Microphone Status Indicator -->
+        <div id="micStatusCard" class="mic-status-card">
+            <div class="mic-status-left">
+                <span id="micStatusIcon" class="mic-status-icon">🎙️</span>
+                <div class="mic-status-info">
+                    <span class="mic-status-title">Your Voice (Microphone)</span>
+                    <span id="micStatusText" class="mic-status-text">Checking permission...</span>
+                </div>
+            </div>
+            <button id="enableMicBtn" class="btn-mic-action hidden" type="button">Enable</button>
+        </div>
+
         <!-- Action Controls -->
         <div class="button-group">
             <button id="startBtn" class="btn btn-primary" disabled>

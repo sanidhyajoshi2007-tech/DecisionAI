@@ -20,8 +20,50 @@ document.addEventListener("DOMContentLoaded", async () => {
   const inputSection = document.getElementById("inputSection");
   const meetingTitle = document.getElementById("meetingTitle");
   const statusMessage = document.getElementById("statusMessage");
+  const micStatusCard = document.getElementById("micStatusCard");
+  const micStatusText = document.getElementById("micStatusText");
+  const enableMicBtn = document.getElementById("enableMicBtn");
 
   let timerInterval = null;
+
+  // Check and observe microphone permission status
+  async function checkMicPermission() {
+    try {
+      if (navigator.permissions && navigator.permissions.query) {
+        const perm = await navigator.permissions.query({ name: "microphone" });
+        updateMicUI(perm.state);
+        perm.onchange = () => updateMicUI(perm.state);
+        return perm.state === "granted";
+      }
+    } catch (e) {
+      console.warn("Permissions query failed:", e);
+    }
+    return false;
+  }
+
+  function updateMicUI(state) {
+    if (state === "granted") {
+      micStatusText.textContent = "Ready (Your voice will be recorded)";
+      micStatusText.style.color = "#4ade80";
+      enableMicBtn.classList.add("hidden");
+    } else if (state === "denied") {
+      micStatusText.textContent = "Blocked in browser settings";
+      micStatusText.style.color = "#f87171";
+      enableMicBtn.classList.remove("hidden");
+      enableMicBtn.textContent = "Fix";
+    } else {
+      micStatusText.textContent = "Permission needed for your voice";
+      micStatusText.style.color = "#fbbf24";
+      enableMicBtn.classList.remove("hidden");
+      enableMicBtn.textContent = "Enable";
+    }
+  }
+
+  enableMicBtn.addEventListener("click", () => {
+    chrome.tabs.create({ url: chrome.runtime.getURL("permission.html") });
+  });
+
+  await checkMicPermission();
 
   // 1. Check current active tab
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
@@ -63,6 +105,15 @@ document.addEventListener("DOMContentLoaded", async () => {
   startBtn.addEventListener("click", async () => {
     if (!isMeetTab) return;
 
+    // Verify microphone permission first
+    const isMicGranted = await checkMicPermission();
+    if (!isMicGranted) {
+      // Open permission tab so the user can click Allow without popup auto-closing
+      chrome.tabs.create({ url: chrome.runtime.getURL("permission.html") });
+      setStatus("Please click 'Allow' on the microphone tab that just opened.", true);
+      return;
+    }
+
     startBtn.disabled = true;
     startBtn.innerHTML = "<span>Starting...</span>";
     setStatus("Connecting to tab audio and mic...", false);
@@ -72,6 +123,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         type: "START_RECORDING",
         tabId: tab.id,
         title: meetingTitle.value.trim() || "Google Meet Call",
+        hasMicPermission: true,
       });
 
       if (!response || !response.success) {
@@ -128,6 +180,7 @@ document.addEventListener("DOMContentLoaded", async () => {
       // Recording Active State
       tabNotice.classList.add("hidden");
       inputSection.classList.add("hidden");
+      micStatusCard.classList.add("hidden");
       startBtn.classList.add("hidden");
       stopBtn.classList.remove("hidden");
       stopBtn.disabled = false;

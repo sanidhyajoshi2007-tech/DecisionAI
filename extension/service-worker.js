@@ -23,7 +23,7 @@ chrome.runtime.onInstalled.addListener(async () => {
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.type === "START_RECORDING") {
-    handleStartRecording(message.tabId, message.title)
+    handleStartRecording(message.tabId, message.title, message.hasMicPermission)
       .then((res) => sendResponse(res))
       .catch((err) => sendResponse({ success: false, error: err.message }));
     return true;
@@ -42,7 +42,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 });
 
-async function handleStartRecording(tabId, title) {
+async function handleStartRecording(tabId, title, hasMicPermission) {
   const { recordingState = "idle" } = await chrome.storage.session.get("recordingState");
 
   if (recordingState !== "idle") {
@@ -54,11 +54,16 @@ async function handleStartRecording(tabId, title) {
 
   try {
     // 1. Create meeting in backend
-    const createRes = await fetch(`${BACKEND_BASE}/meetings`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ title: title || "Google Meet Call" }),
-    });
+    let createRes;
+    try {
+      createRes = await fetch(`${BACKEND_BASE}/meetings`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title: title || "Google Meet Call" }),
+      });
+    } catch (netErr) {
+      throw new Error(`Cannot reach backend at ${BACKEND_BASE}. Make sure the FastAPI server is running.`);
+    }
 
     if (!createRes.ok) {
       throw new Error(`Backend returned status ${createRes.status}`);
@@ -81,11 +86,16 @@ async function handleStartRecording(tabId, title) {
     }
 
     // 4. Instruct offscreen document to begin capture and WebSocket streaming
-    await chrome.runtime.sendMessage({
+    const captureRes = await chrome.runtime.sendMessage({
       type: "START_OFFSCREEN_CAPTURE",
       streamId,
       meetingId,
+      hasMicPermission,
     });
+
+    if (!captureRes || !captureRes.success) {
+      throw new Error(captureRes?.error || "Offscreen audio capture failed to start");
+    }
 
     // 5. Update state and set visual REC badge
     await chrome.storage.session.set({

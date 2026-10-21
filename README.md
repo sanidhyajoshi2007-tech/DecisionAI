@@ -60,7 +60,7 @@ Chrome Extension (MV3)          FastAPI Backend              Frontend (Vanilla)
 
 ---
 
-## Phase 2 — Audio Upload & Storage ✅
+## Phase 2 — Audio Upload & Storage 
 
 **What was built:**
 - Audio upload endpoint: `POST /api/meetings/upload` accepting multipart audio (`file` or `audio_file`) and `title`
@@ -74,7 +74,7 @@ Chrome Extension (MV3)          FastAPI Backend              Frontend (Vanilla)
 
 ---
 
-## Chrome Extension (MV3) & Live Audio Streaming ✅
+## Chrome Extension (MV3) & Live Audio Streaming 
 
 **What was built:**
 - **MV3 Extension (`/extension`)**:

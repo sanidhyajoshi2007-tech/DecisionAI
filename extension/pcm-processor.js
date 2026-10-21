@@ -38,12 +38,30 @@ class PCMRecorderProcessor extends AudioWorkletProcessor {
     const numSamples = input[0].length;
 
     for (let i = 0; i < numSamples; i++) {
-      // Downmix all channels to mono
-      let sum = 0;
-      for (let ch = 0; ch < numChannels; ch++) {
-        sum += input[ch][i];
+      let monoSample;
+      if (numChannels === 1) {
+        monoSample = input[0][i];
+      } else if (this.channel === "mic") {
+        // Microphone: Use primary channel (input[0]) directly to avoid
+        // destructive comb filtering and phase cancellation from multi-mic laptop arrays
+        monoSample = input[0][i];
+      } else if (numChannels === 2) {
+        // Tab audio: If stereo channels are out of phase, avoid destructive cancellation
+        const ch0 = input[0][i];
+        const ch1 = input[1][i];
+        if (ch0 * ch1 < -0.01) {
+          monoSample = Math.abs(ch0) >= Math.abs(ch1) ? ch0 : ch1;
+        } else {
+          monoSample = (ch0 + ch1) * 0.5;
+        }
+      } else {
+        // Fallback for multi-channel tab audio
+        let sum = 0;
+        for (let ch = 0; ch < numChannels; ch++) {
+          sum += input[ch][i];
+        }
+        monoSample = sum / numChannels;
       }
-      const monoSample = sum / numChannels;
 
       this.buffer[this.bufferIndex++] = monoSample;
 

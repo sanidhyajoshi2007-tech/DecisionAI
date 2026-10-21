@@ -24,7 +24,7 @@ const MIC_PREFIX = new Uint8Array([0x4d, 0x49, 0x43, 0x3a]);
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.type === "START_OFFSCREEN_CAPTURE") {
-    startCapture(message.streamId, message.meetingId)
+    startCapture(message.streamId, message.meetingId, message.hasMicPermission)
       .then(() => sendResponse({ success: true }))
       .catch((err) => {
         console.error("Failed to start offscreen capture:", err);
@@ -44,54 +44,133 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 });
 
-async function startCapture(streamId, meetingId) {
+async function startCapture(streamId, meetingId, hasMicPermission) {
   currentMeetingId = meetingId;
   isRecording = true;
   bufferQueue.length = 0;
 
   // 1. Capture Google Meet tab audio
-  tabStream = await navigator.mediaDevices.getUserMedia({
-    audio: {
-      mandatory: {
-        chromeMediaSource: "tab",
-        chromeMediaSourceId: streamId,
+  try {
+    tabStream = await navigator.mediaDevices.getUserMedia({
+      audio: {
+        mandatory: {
+          chromeMediaSource: "tab",
+          chromeMediaSourceId: streamId,
+        },
       },
-    },
-    video: false,
-  });
+      video: false,
+    });
+  } catch (err) {
+    console.error("Failed to capture tab audio:", err);
+    throw new Error(`Tab audio capture failed: ${err.message}`);
+  }
 
-  // 2. Capture User's Microphone
-  micStream = await navigator.mediaDevices.getUserMedia({
-    audio: {
-      echoCancellation: true,
-      noiseSuppression: true,
-      autoGainControl: true,
-    },
-    video: false,
-  });
+  // 2. Capture User's Microphone (safely wrapped so mic denial never breaks tab recording)
+  micStream = null;
+  try {
+    // Request clean, natural microphone audio.
+    // Disabling aggressive noiseSuppression and echoCancellation prevents
+    // Chrome's WebRTC DSP from applying a severe bandpass filter that cuts high frequencies.
+    micStream = await navigator.mediaDevices.getUserMedia({
+      audio: {
+        channelCount: 1,
+        echoCancellation: false,
+        noiseSuppression: false,
+        autoGainControl: false,
+      },
+      video: false,
+    });
+    console.log("Captured clean microphone stream:", micStream.getAudioTracks()[0]?.label);
+  } catch (err) {
+    console.warn("Clean mic constraints failed, trying basic audio:", err);
+    try {
+      micStream = await navigator.mediaDevices.getUserMedia({
+        audio: { channelCount: 1 },
+        video: false,
+      });
+      console.log("Captured fallback microphone stream:", micStream.getAudioTracks()[0]?.label);
+    } catch (basicErr) {
+      console.warn("Microphone capture unavailable or denied:", basicErr);
+      micStream = null;
+    }
+  }
 
   // 3. Initialize AudioContext at 16 kHz
   audioCtx = new AudioContext({ sampleRate: 16000 });
-  await audioCtx.audioWorklet.addModule("pcm-processor.js");
+  if (audioCtx.state === "suspended") {
+    await audioCtx.resume();
+  }
+
+  const processorUrl = chrome.runtime.getURL("pcm-processor.js");
+  await audioCtx.audioWorklet.addModule(processorUrl);
 
   // Route tab audio to speakers so the user can continue hearing participants!
   const tabSource = audioCtx.createMediaStreamSource(tabStream);
   tabSource.connect(audioCtx.destination);
 
-  // 4. Create separate AudioWorkletNodes for tab and mic
+  // Create silent gain node connected to destination to ensure Chrome's Web Audio graph
+  // continuously pulls audio frames through the worklets without echoing mic into headphones
+  const silentSink = audioCtx.createGain();
+  silentSink.gain.value = 0;
+  silentSink.connect(audioCtx.destination);
+
+  // 4. Create separate AudioWorkletNodes for tab and mic with clean voice pre-filters
   tabWorklet = new AudioWorkletNode(audioCtx, "pcm-recorder-processor", {
     processorOptions: { channel: "tab" },
   });
-  micWorklet = new AudioWorkletNode(audioCtx, "pcm-recorder-processor", {
-    processorOptions: { channel: "mic" },
-  });
-
   tabWorklet.port.onmessage = (e) => handlePCMChunk(e.data);
-  micWorklet.port.onmessage = (e) => handlePCMChunk(e.data);
 
-  tabSource.connect(tabWorklet);
-  const micSource = audioCtx.createMediaStreamSource(micStream);
-  micSource.connect(micWorklet);
+  // Tab Audio Voice Pre-Filter: 85 Hz rumble cut + 3.4 kHz consonant clarity boost
+  const tabHighpass = audioCtx.createBiquadFilter();
+  tabHighpass.type = "highpass";
+  tabHighpass.frequency.value = 85;
+  tabHighpass.Q.value = 0.707;
+
+  const tabPresence = audioCtx.createBiquadFilter();
+  tabPresence.type = "peaking";
+  tabPresence.frequency.value = 3400;
+  tabPresence.Q.value = 1.0;
+  tabPresence.gain.value = 3.0;
+
+  tabSource.connect(tabHighpass);
+  tabHighpass.connect(tabPresence);
+  tabPresence.connect(tabWorklet);
+  tabWorklet.connect(silentSink);
+
+  if (micStream) {
+    micWorklet = new AudioWorkletNode(audioCtx, "pcm-recorder-processor", {
+      processorOptions: { channel: "mic" },
+    });
+    micWorklet.port.onmessage = (e) => handlePCMChunk(e.data);
+
+    // Mic Audio Voice Pre-Filter: 100 Hz rumble cut + 380 Hz mud reduction + 3.4 kHz consonant clarity boost
+    const micHighpass = audioCtx.createBiquadFilter();
+    micHighpass.type = "highpass";
+    micHighpass.frequency.value = 100;
+    micHighpass.Q.value = 0.707;
+
+    const micMudCut = audioCtx.createBiquadFilter();
+    micMudCut.type = "peaking";
+    micMudCut.frequency.value = 380;
+    micMudCut.Q.value = 1.0;
+    micMudCut.gain.value = -3.0;
+
+    const micPresence = audioCtx.createBiquadFilter();
+    micPresence.type = "peaking";
+    micPresence.frequency.value = 3400;
+    micPresence.Q.value = 1.0;
+    micPresence.gain.value = 4.0;
+
+    const micSource = audioCtx.createMediaStreamSource(micStream);
+    micSource.connect(micHighpass);
+    micHighpass.connect(micMudCut);
+    micMudCut.connect(micPresence);
+    micPresence.connect(micWorklet);
+    micWorklet.connect(silentSink);
+    console.log("Microphone AudioWorklet attached with voice clarity pre-filter.");
+  } else {
+    console.warn("No microphone stream available; only tab audio will be captured.");
+  }
 
   // 5. Connect WebSocket
   connectWebSocket();
@@ -183,6 +262,8 @@ async function stopCapture() {
     while (bufferQueue.length > 0) {
       socket.send(bufferQueue.shift());
     }
+    // Give WebSocket network buffer a moment to transmit before closing
+    await new Promise((r) => setTimeout(r, 150));
     socket.close();
   }
 

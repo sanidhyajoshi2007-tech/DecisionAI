@@ -125,3 +125,43 @@ def test_websocket_audio_streaming_and_finish():
         app.dependency_overrides.pop(get_settings, None)
         if Path(test_settings.audio_storage_dir).exists():
             shutil.rmtree(test_settings.audio_storage_dir, ignore_errors=True)
+
+
+def test_live_recording_empty_session():
+    """
+    Test finishing recording when no audio was captured (e.g. 0 chunks).
+    Verifies WAV files are created with valid headers, no 404s, and duration is 0.0s.
+    """
+    test_settings = get_test_settings()
+    app.dependency_overrides[get_settings] = lambda: test_settings
+
+    try:
+        with TestClient(app) as sync_client:
+            create_res = sync_client.post("/meetings", json={"title": "Empty Call"})
+            assert create_res.status_code == 200
+            meeting_id = create_res.json()["id"]
+
+            finish_res = sync_client.post(f"/meetings/{meeting_id}/finish")
+            assert finish_res.status_code == 200
+            finish_data = finish_res.json()
+            assert finish_data["status"] == "ready"
+            assert finish_data["duration_seconds"] == 0.0
+
+            # Tab and mic files should still exist with valid headers so playback never 404s
+            tab_audio_res = sync_client.get(f"/meetings/{meeting_id}/audio/tab")
+            assert tab_audio_res.status_code == 200
+            assert "audio/wav" in tab_audio_res.headers["content-type"]
+
+            mic_audio_res = sync_client.get(f"/meetings/{meeting_id}/audio/mic")
+            assert mic_audio_res.status_code == 200
+            assert "audio/wav" in mic_audio_res.headers["content-type"]
+
+            # Viewer page shows duration and warning notice
+            view_res = sync_client.get(f"/meetings/{meeting_id}")
+            assert view_res.status_code == 200
+            assert "0.0s" in view_res.text
+            assert "No Audio Data Captured" in view_res.text
+    finally:
+        app.dependency_overrides.pop(get_settings, None)
+        if Path(test_settings.audio_storage_dir).exists():
+            shutil.rmtree(test_settings.audio_storage_dir, ignore_errors=True)

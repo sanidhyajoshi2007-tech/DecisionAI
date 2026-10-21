@@ -58,12 +58,12 @@ async def client() -> AsyncGenerator[AsyncClient, None]:
         expire_on_commit=False,
     )
 
-    # Import models so create_all picks them up.
-    # (They'll be added in Phase 1; this is a no-op for now.)
-    from backend.models import base  # noqa: F401
+    # Import all models so create_all registers all tables
+    import backend.models  # noqa: F401
+    from backend.models.base import Base
 
     async with test_engine.begin() as conn:
-        await conn.run_sync(base.Base.metadata.create_all)
+        await conn.run_sync(Base.metadata.create_all)
 
     async def override_get_db() -> AsyncGenerator[AsyncSession, None]:
         async with test_session_factory() as session:

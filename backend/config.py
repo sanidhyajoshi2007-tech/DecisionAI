@@ -40,9 +40,28 @@ class Settings(BaseSettings):
     audio_storage_dir: str = "audio_storage"
     max_upload_size_mb: int = 500
 
-    # ── Transcription ──
+    # ── Transcription (faster_whisper, gemini, sarvam, deepgram) ──
     transcription_provider: str = "faster_whisper"
     whisper_model_size: str = "small"
+    whisper_device: str = "cpu"
+    whisper_compute_type: str = "int8"
+    
+    # Gemini Audio STT
+    gemini_api_key: str = ""
+    gemini_model: str = "gemini-2.0-flash"
+    gemini_transcription_model: str = "gemini-2.0-flash"
+    
+    # Sarvam AI STT (Hindi & Indian languages)
+    sarvam_api_key: str = ""
+    sarvam_model: str = "saaras:v4"
+    sarvam_mode: str = "codemix"  # codemix, transcribe, verbatim, translit
+    
+    # Deepgram STT
+    deepgram_api_key: str = ""
+    deepgram_model: str = "nova-3"
+    
+    # Transcription Glossary (comma-separated hints for proper nouns / terms)
+    transcription_glossary: str = "DecisionAI, Google Meet, Standup, UPI, Aadhaar"
 
     # ── Embeddings ──
     embedding_model: str = "paraphrase-multilingual-MiniLM-L12-v2"
@@ -51,8 +70,6 @@ class Settings(BaseSettings):
     chroma_persist_dir: str = "chroma_data"
 
     # ── LLM ──
-    gemini_api_key: str = ""
-    gemini_model: str = "gemini-1.5-flash"
 
     # ── CORS ──
     cors_origins: str = "http://localhost:8000"
@@ -63,15 +80,23 @@ class Settings(BaseSettings):
         return [o.strip() for o in self.cors_origins.split(",") if o.strip()]
 
     @property
+    def glossary_list(self) -> list[str]:
+        """Parse comma-separated glossary hints into a list."""
+        return [g.strip() for g in self.transcription_glossary.split(",") if g.strip()]
+
+    @property
     def max_upload_bytes(self) -> int:
         return self.max_upload_size_mb * 1024 * 1024
 
     @property
     def audio_storage_path(self) -> Path:
         """Ensure audio dir exists and return as Path."""
-        path = Path(self.audio_storage_dir)
-        path.mkdir(parents=True, exist_ok=True)
-        return path
+        p = Path(self.audio_storage_dir)
+        if not p.is_absolute():
+            base_dir = Path(__file__).resolve().parent.parent
+            p = base_dir / p
+        p.mkdir(parents=True, exist_ok=True)
+        return p
 
 
 @lru_cache()

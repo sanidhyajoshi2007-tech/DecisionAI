@@ -76,6 +76,31 @@ Chrome MV3 Extension                  FastAPI Backend                Browser Fro
 
 ---
 
+## Speech-to-Text (STT) Architecture
+
+DecisionAI features a pluggable, multi-provider transcription pipeline in `backend/services/stt/`:
+
+### Providers
+1. **faster-whisper** (`FasterWhisperProvider`): Local offline inference using CTranslate2 (int8/float16). Fast, private, and zero API cost. Supports domain glossaries via `initial_prompt`.
+2. **Google Gemini** (`GeminiTranscriptionProvider`): Multimodal audio understanding via Google GenAI REST API (`gemini-2.5-flash`). Handles conversational Hindi/English code-switching and structured JSON timestamps.
+3. **Sarvam AI** (`SarvamTranscriptionProvider`): Indian language specialist (`saaras:v4`). Built for Indian accents and regional dialects with native `codemix` mode and `prompt` keyterms.
+4. **Deepgram** (`DeepgramTranscriptionProvider`): Cloud speech platform with `nova-3`, `utterances=true`, and keyword boosting (`Term:2`).
+
+### Chunking & Chronological Channel Merge
+- When `/meetings/{id}/finish` is called, a background task (`process_meeting_transcription`) triggers.
+- Long audio files are chunked into 30-second segments with 0.5-second overlap to respect API limits and prevent memory exhaustion.
+- Tab audio (participants) and Mic audio (user) are transcribed concurrently.
+- Segments from both channels are chronologically sorted and merged by `start_ms`.
+- Each segment stores: `meeting_id`, `speaker` ("You (Mic)" vs "Participant (Tab)"), `start_ms`, `end_ms`, `start_time`, `end_time`, `text`, `raw_text`, and `language`.
+
+### Hindi & Hinglish Benchmarking
+- `scripts/benchmark.py`: Evaluates providers against human-corrected ground truth transcripts.
+- Performs Unicode NFC normalization, nukta/danda cleanup for Devanagari Hindi, and phonetic equivalence token mappings for Hinglish.
+- Calculates Word Error Rate (WER) via Levenshtein distance and renders a side-by-side comparison table.
+- Run demo benchmark: `python scripts/benchmark.py --demo`
+
+---
+
 ## Testing Guidelines
 
 ```bash

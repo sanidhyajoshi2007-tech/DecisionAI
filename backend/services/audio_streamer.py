@@ -98,19 +98,30 @@ def get_or_create_writer(meeting_id: int, settings: Settings) -> MeetingAudioWri
 def finish_writer(meeting_id: int, settings: Settings) -> tuple[Path, Path, float]:
     """
     Close writers for a meeting and return (tab_path, mic_path, duration_seconds).
+    Ensures both WAV files exist on disk with valid headers even if empty.
     """
     writer = _active_writers.pop(meeting_id, None)
     if writer:
         writer.close()
 
+    settings.audio_storage_path.mkdir(parents=True, exist_ok=True)
     tab_path = settings.audio_storage_path / f"{meeting_id}_tab.wav"
     mic_path = settings.audio_storage_path / f"{meeting_id}_mic.wav"
+
+    # Guarantee both WAV files exist so audio players never 404
+    for path in (tab_path, mic_path):
+        if not path.exists():
+            with wave.open(str(path), "wb") as wf:
+                wf.setnchannels(1)
+                wf.setsampwidth(2)
+                wf.setframerate(16000)
 
     tab_duration = get_wav_duration(tab_path)
     mic_duration = get_wav_duration(mic_path)
     max_duration = max(tab_duration, mic_duration)
 
     return tab_path, mic_path, max_duration
+
 
 
 def get_wav_duration(path: Path) -> float:

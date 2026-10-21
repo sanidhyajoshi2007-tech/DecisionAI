@@ -288,6 +288,60 @@ body {
     background: #22c55e;
 }
 
+/* Microphone Status Card */
+.mic-status-card {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 12px;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: 8px;
+    font-size: 12px;
+}
+
+.mic-status-left {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.mic-status-icon {
+    font-size: 14px;
+}
+
+.mic-status-info {
+    display: flex;
+    flex-direction: column;
+}
+
+.mic-status-title {
+    font-weight: 600;
+    color: #e2e8f0;
+}
+
+.mic-status-text {
+    font-size: 11px;
+    color: #94a3b8;
+}
+
+.btn-mic-action {
+    background: rgba(99, 102, 241, 0.2);
+    border: 1px solid rgba(99, 102, 241, 0.5);
+    color: #a5b4fc;
+    border-radius: 6px;
+    padding: 4px 8px;
+    font-size: 11px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.btn-mic-action:hover {
+    background: rgba(99, 102, 241, 0.35);
+    color: #ffffff;
+}
+
 .hidden {
     display: none !important;
 }
