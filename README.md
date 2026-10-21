@@ -45,6 +45,35 @@ Chrome Extension (MV3)          FastAPI Backend              Frontend (Vanilla)
 3. `backend/main.py` wires up CORS, mounts the frontend as static files, and exposes `/api/health`.
 4. Tests use dependency overrides to swap in an in-memory database per test.
 
+---
+
+## Phase 1 — Database Models & Migrations ✅
+
+**What was built:**
+- SQLAlchemy models: `User`, `Meeting`, `TranscriptSegment`
+- Meeting lifecycle status enum: `uploading → processing → ready → error`
+- Alembic database migration environment and initial schema migration
+- CRUD layers: `backend/crud/meetings.py`, `backend/crud/users.py` with strict user-scoping
+- Pydantic request/response schemas in `backend/schemas/`
+- Dev auth dependency stub in `backend/auth.py` (auto-creates dev user id=1)
+- Model & CRUD test suite in `tests/test_models.py`
+
+---
+
+## Phase 2 — Audio Upload & Storage ✅
+
+**What was built:**
+- Audio upload endpoint: `POST /api/meetings/upload` accepting multipart audio (`file` or `audio_file`) and `title`
+- Audio storage service in `backend/services/storage.py` with streaming 64 KB chunked writes to prevent memory spikes
+- Storage disk structure: `audio_storage/{user_id}/{meeting_id}.{ext}`
+- Audio format validation supporting WebM, WAV, MP3, M4A, OGG, AAC, and FLAC
+- Max upload size enforcement (`MAX_UPLOAD_SIZE_MB`, default 500 MB) with 413 response and cleanup of partial files
+- Empty file rejection (400) and missing file handling (422)
+- Database record creation with `status=uploading` returning `MeetingResponse`
+- Unit and integration tests in `tests/test_upload.py`
+
+---
+
 **How to run:**
 ```bash
 # Setup
@@ -52,6 +81,9 @@ python -m venv venv
 .\venv\Scripts\activate        # Windows
 pip install -r requirements.txt
 cp .env.example .env
+
+# Run migrations
+alembic upgrade head
 
 # Run the server
 uvicorn backend.main:app --reload

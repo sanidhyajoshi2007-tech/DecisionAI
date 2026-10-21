@@ -17,6 +17,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from backend.config import get_settings
+from backend.routers import meetings_router
 
 settings = get_settings()
 
@@ -71,6 +72,11 @@ async def health_check() -> dict[str, str]:
     Returns 200 if the server is alive. No auth required.
     """
     return {"status": "healthy", "app": settings.app_name}
+
+
+# ── Routers ──────────────────────────────────────────────
+
+app.include_router(meetings_router)
 
 
 # ── Static Files (Frontend) ─────────────────────────────

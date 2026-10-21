@@ -8,6 +8,7 @@ with each other or the real dev database.
 
 import asyncio
 from collections.abc import AsyncGenerator
+from pathlib import Path
 
 import pytest
 import pytest_asyncio
@@ -84,3 +85,7 @@ async def client() -> AsyncGenerator[AsyncClient, None]:
     # Cleanup
     app.dependency_overrides.clear()
     await test_engine.dispose()
+
+    import shutil
+    if Path(test_settings.audio_storage_dir).exists():
+        shutil.rmtree(test_settings.audio_storage_dir, ignore_errors=True)

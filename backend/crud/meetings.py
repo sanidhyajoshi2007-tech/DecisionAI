@@ -118,6 +118,47 @@ async def update_meeting_duration(
         await db.flush()
 
 
+async def update_meeting_audio_path(
+    db: AsyncSession,
+    meeting_id: int,
+    audio_path: str,
+) -> Meeting | None:
+    """Set the audio storage path for a meeting."""
+    result = await db.execute(
+        select(Meeting).where(Meeting.id == meeting_id)
+    )
+    meeting = result.scalar_one_or_none()
+    if meeting:
+        meeting.audio_path = audio_path
+        await db.flush()
+        await db.refresh(meeting)
+    return meeting
+
+
+async def delete_meeting(
+    db: AsyncSession,
+    meeting_id: int,
+    user_id: int,
+) -> bool:
+    """
+    Delete a meeting and its transcript segments, scoped by user_id.
+    Returns True if deleted, False if not found.
+    """
+    result = await db.execute(
+        select(Meeting).where(
+            Meeting.id == meeting_id,
+            Meeting.user_id == user_id,
+        )
+    )
+    meeting = result.scalar_one_or_none()
+    if not meeting:
+        return False
+    await db.delete(meeting)
+    await db.flush()
+    return True
+
+
+
 # ── Transcript Segments ──────────────────────────────────
 
 async def create_segments(
