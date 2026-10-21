@@ -46,10 +46,10 @@ class Settings(BaseSettings):
     whisper_device: str = "cpu"
     whisper_compute_type: str = "int8"
     
-    # Gemini Audio STT
+    # Gemini Audio STT & LLM
     gemini_api_key: str = ""
-    gemini_model: str = "gemini-2.0-flash"
-    gemini_transcription_model: str = "gemini-2.0-flash"
+    gemini_model: str = "gemini-3.8-flash"
+    gemini_transcription_model: str = "gemini-3.8-flash"
     
     # Sarvam AI STT (Hindi & Indian languages)
     sarvam_api_key: str = ""
