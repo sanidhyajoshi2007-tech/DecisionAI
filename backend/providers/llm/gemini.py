@@ -68,7 +68,7 @@ class GeminiLLMProvider(LLMProvider):
     def _get_candidate_models(self) -> list[str]:
         """Order of Gemini models to attempt, falling back if rate limits occur."""
         preferred = [self.model]
-        candidates = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash", "gemini-3.8-flash"]
+        candidates = ["gemini-3.8-flash", "gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash"]
         for c in candidates:
             if c not in preferred:
                 preferred.append(c)
