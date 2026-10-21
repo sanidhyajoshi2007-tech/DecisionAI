@@ -17,7 +17,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from backend.config import get_settings
-from backend.routers import meetings_router
+from backend.routers import auth_router, meetings_router
 
 settings = get_settings()
 
@@ -76,6 +76,7 @@ async def health_check() -> dict[str, str]:
 
 # ── Routers ──────────────────────────────────────────────
 
+app.include_router(auth_router)
 app.include_router(meetings_router)
 
 

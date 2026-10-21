@@ -23,6 +23,16 @@ class UserResponse(BaseModel):
     id: int
     email: str
     name: str
+    avatar_url: str | None = None
+    google_id: str | None = None
     created_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+class ExtensionTokenResponse(BaseModel):
+    """Returned when extension requests a short-lived session token."""
+    token: str
+    token_type: str = "Bearer"
+    expires_in: int
+    user: UserResponse

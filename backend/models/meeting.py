@@ -47,6 +47,10 @@ class Meeting(Base):
         Enum(MeetingStatus),
         default=MeetingStatus.UPLOADING,
     )
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    ended_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    language: Mapped[str | None] = mapped_column(String(50), nullable=True, default="en")
+
     # Relative path from AUDIO_STORAGE_DIR
     audio_path: Mapped[str | None] = mapped_column(String(1000), nullable=True)
     duration_seconds: Mapped[float | None] = mapped_column(Float, nullable=True)
@@ -69,6 +73,11 @@ class Meeting(Base):
         back_populates="meeting",
         cascade="all, delete-orphan",
         order_by="TranscriptSegment.start_time",
+    )
+    decisions: Mapped[list["Decision"]] = relationship(  # noqa: F821
+        back_populates="meeting",
+        cascade="all, delete-orphan",
+        order_by="Decision.timestamp_ms",
     )
 
     def __repr__(self) -> str:

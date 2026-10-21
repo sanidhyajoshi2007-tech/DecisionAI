@@ -2,6 +2,8 @@
 API route modules.
 """
 
+from backend.routers.auth import router as auth_router
 from backend.routers.meetings import router as meetings_router
 
-__all__ = ["meetings_router"]
+__all__ = ["auth_router", "meetings_router"]
+

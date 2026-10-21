@@ -9,6 +9,7 @@ from fastapi import (
     File,
     Form,
     HTTPException,
+    Query,
     UploadFile,
     WebSocket,
     WebSocketDisconnect,
@@ -19,36 +20,38 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.auth import get_current_user
 from backend.config import Settings, get_settings
+from backend.crud.decisions import (
+    create_decision,
+    delete_decision,
+    list_decisions,
+)
 from backend.crud.meetings import (
     create_meeting,
     delete_meeting,
+    get_meeting,
     get_meeting_by_id,
+    list_meetings,
     update_meeting_audio_path,
 )
 from backend.crud.users import create_user, get_user_by_id
-from backend.database import get_db
+from backend.database import async_session_maker, get_db
 from backend.models.meeting import MeetingStatus
 from backend.models.user import User
-from backend.schemas.meeting import MeetingCreate, MeetingResponse
+from backend.schemas.decision import DecisionCreate, DecisionListResponse, DecisionResponse
+from backend.schemas.meeting import MeetingCreate, MeetingListResponse, MeetingResponse
 from backend.services.audio_streamer import (
     finish_writer,
     get_or_create_writer,
     parse_audio_chunk,
 )
+from backend.services.auth import decode_token
+from backend.services.rate_limiter import rate_limit
 from backend.services.storage import (
     save_audio_file,
     validate_audio_file,
 )
 
 router = APIRouter(tags=["meetings"])
-
-
-async def _get_or_create_dev_user(db: AsyncSession) -> User:
-    """Helper to ensure a dev user exists when auth is skipped."""
-    user = await get_user_by_id(db, 1)
-    if user is None:
-        user = await create_user(db, email="dev@decisionai.local", name="Dev User")
-    return user
 
 
 # ── Create Meeting (Live Streaming) ───────────────────────
@@ -58,30 +61,32 @@ async def _get_or_create_dev_user(db: AsyncSession) -> User:
     response_model=MeetingResponse,
     status_code=status.HTTP_200_OK,
     summary="Create a new meeting for recording",
+    dependencies=[Depends(rate_limit(requests_per_minute=60))],
 )
 @router.post(
     "/api/meetings",
     response_model=MeetingResponse,
     status_code=status.HTTP_200_OK,
     include_in_schema=False,
+    dependencies=[Depends(rate_limit(requests_per_minute=60))],
 )
 async def create_new_meeting(
     payload: MeetingCreate | None = None,
     db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
     settings: Settings = Depends(get_settings),
 ) -> MeetingResponse:
     """
-    Create a meeting record ahead of live WebSocket streaming.
-    Skips authentication for prototype/extension ease of use.
+    Create a meeting record ahead of live WebSocket streaming, scoped to current_user.
     """
-    dev_user = await _get_or_create_dev_user(db)
     title = payload.title if payload and payload.title else "Google Meet Call"
     meeting = await create_meeting(
         db=db,
-        user_id=dev_user.id,
+        user_id=current_user.id,
         title=title,
     )
     return MeetingResponse.model_validate(meeting)
+
 
 
 # ── Audio Upload (Multipart / Phase 2) ───────────────────
@@ -152,8 +157,31 @@ async def websocket_meeting_stream(
 ):
     """
     Stream 1-second 16 kHz 16-bit mono PCM chunks over WebSocket.
-    Saves tab and mic audio to separate WAV files in audio_storage.
+    Authenticates via ?token= query parameter or session cookie,
+    and scopes connection to meeting owner.
     """
+    token = websocket.query_params.get("token") or websocket.cookies.get(settings.session_cookie_name)
+    user_id = None
+    if token:
+        try:
+            payload = decode_token(token, secret_key=settings.secret_key)
+            user_id = int(payload["sub"])
+        except Exception:
+            await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason="Invalid or expired token")
+            return
+    elif settings.app_env == "development":
+        user_id = 1
+    else:
+        await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason="Authentication required")
+        return
+
+    # Verify meeting ownership if meeting already exists in database
+    async with async_session_maker() as db:
+        meeting = await get_meeting_by_id(db, meeting_id)
+        if meeting and meeting.user_id != user_id:
+            await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason="Unauthorized meeting access")
+            return
+
     await websocket.accept()
     writer = get_or_create_writer(meeting_id, settings)
 
@@ -180,27 +208,35 @@ async def websocket_meeting_stream(
 @router.post(
     "/meetings/{meeting_id}/finish",
     summary="Finish live audio recording and finalize audio files",
+    dependencies=[Depends(rate_limit(requests_per_minute=60))],
 )
 @router.post(
     "/api/meetings/{meeting_id}/finish",
     include_in_schema=False,
+    dependencies=[Depends(rate_limit(requests_per_minute=60))],
 )
 async def finish_meeting_recording(
     meeting_id: int,
     background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
     settings: Settings = Depends(get_settings),
 ) -> dict:
     """
     Called when recording stops. Closes writers, queues background transcription,
-    and updates meeting status.
+    and updates meeting status scoped to current_user.
     """
+    meeting = await get_meeting_by_id(db, meeting_id)
+    if meeting and meeting.user_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not authorized to finish this meeting",
+        )
+
     tab_path, mic_path, duration = finish_writer(meeting_id, settings)
 
-    meeting = await get_meeting_by_id(db, meeting_id)
     if not meeting:
-        dev_user = await _get_or_create_dev_user(db)
-        meeting = await create_meeting(db, user_id=dev_user.id, title="Google Meet Call")
+        meeting = await create_meeting(db, user_id=current_user.id, title="Google Meet Call")
 
     meeting.status = MeetingStatus.READY
     meeting.duration_seconds = duration
@@ -239,16 +275,25 @@ async def finish_meeting_recording(
 async def get_meeting_audio_file(
     meeting_id: int,
     channel: str,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
     settings: Settings = Depends(get_settings),
 ):
-    """Serve recorded WAV file for a channel (tab or mic)."""
+    """Serve recorded WAV file for a channel (tab or mic), scoped to current_user."""
+    meeting = await get_meeting(db, meeting_id=meeting_id, user_id=current_user.id)
+    if not meeting:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Audio file for meeting {meeting_id} channel '{channel}' not found",
+        )
+
     channel_clean = channel.lower()
     filename = f"{meeting_id}_{channel_clean}.wav"
     file_path = settings.audio_storage_path / filename
 
     if not file_path.exists():
         raise HTTPException(
-            status_code=404,
+            status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Audio file for meeting {meeting_id} channel '{channel}' not found",
         )
     return FileResponse(path=file_path, media_type="audio/wav", filename=filename)
@@ -260,14 +305,20 @@ async def get_meeting_audio_file(
 async def view_meeting_page(
     meeting_id: int,
     db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
     settings: Settings = Depends(get_settings),
 ):
     """HTML Viewer opened in a new tab when recording completes."""
-    meeting = await get_meeting_by_id(db, meeting_id)
-    title = meeting.title if meeting else f"Meeting #{meeting_id}"
-    duration_val = meeting.duration_seconds if meeting and meeting.duration_seconds is not None else 0.0
+    meeting = await get_meeting(db, meeting_id=meeting_id, user_id=current_user.id)
+    if not meeting:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Meeting not found or you do not have permission to view it",
+        )
+    title = meeting.title
+    duration_val = meeting.duration_seconds if meeting.duration_seconds is not None else 0.0
     duration_str = f"{duration_val:.1f}s"
-    status_str = meeting.status.value if meeting else "ready"
+    status_str = meeting.status.value
 
     tab_url = f"/meetings/{meeting_id}/audio/tab"
     mic_url = f"/meetings/{meeting_id}/audio/mic"
@@ -1121,3 +1172,131 @@ async def view_meeting_page(
 </body>
 </html>"""
     return HTMLResponse(content=html)
+
+
+# ── Meetings REST API (User Scoped) ───────────────────────
+
+@router.get(
+    "/api/meetings",
+    response_model=MeetingListResponse,
+    summary="List meetings for the current user",
+    dependencies=[Depends(rate_limit(requests_per_minute=60))],
+)
+async def list_user_meetings(
+    page: int = Query(1, ge=1, description="Page number"),
+    page_size: int = Query(20, ge=1, le=100, description="Items per page"),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> MeetingListResponse:
+    meetings, total = await list_meetings(
+        db=db,
+        user_id=current_user.id,
+        page=page,
+        page_size=page_size,
+    )
+    return MeetingListResponse(
+        meetings=[MeetingResponse.model_validate(m) for m in meetings],
+        total=total,
+        page=page,
+        page_size=page_size,
+    )
+
+
+@router.get(
+    "/api/meetings/{meeting_id}",
+    response_model=MeetingResponse,
+    summary="Get meeting details scoped to user",
+    dependencies=[Depends(rate_limit(requests_per_minute=60))],
+)
+async def get_user_meeting(
+    meeting_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> MeetingResponse:
+    meeting = await get_meeting(db, meeting_id=meeting_id, user_id=current_user.id)
+    if not meeting:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Meeting not found")
+    return MeetingResponse.model_validate(meeting)
+
+
+@router.delete(
+    "/api/meetings/{meeting_id}",
+    summary="Delete a meeting scoped to user",
+    dependencies=[Depends(rate_limit(requests_per_minute=30))],
+)
+async def delete_user_meeting(
+    meeting_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> dict[str, str]:
+    deleted = await delete_meeting(db, meeting_id=meeting_id, user_id=current_user.id)
+    if not deleted:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Meeting not found")
+    return {"status": "deleted", "meeting_id": str(meeting_id)}
+
+
+# ── Decisions REST API (User Scoped) ──────────────────────
+
+@router.get(
+    "/api/meetings/{meeting_id}/decisions",
+    response_model=DecisionListResponse,
+    summary="List decisions and action items for a meeting",
+    dependencies=[Depends(rate_limit(requests_per_minute=60))],
+)
+async def list_meeting_decisions(
+    meeting_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> DecisionListResponse:
+    meeting = await get_meeting(db, meeting_id=meeting_id, user_id=current_user.id)
+    if not meeting:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Meeting not found")
+    decisions = await list_decisions(db, meeting_id=meeting_id, user_id=current_user.id)
+    return DecisionListResponse(
+        meeting_id=meeting_id,
+        decisions=[DecisionResponse.model_validate(d) for d in decisions],
+        total=len(decisions),
+    )
+
+
+@router.post(
+    "/api/meetings/{meeting_id}/decisions",
+    response_model=DecisionResponse,
+    summary="Add a decision or action item to a meeting",
+    dependencies=[Depends(rate_limit(requests_per_minute=30))],
+)
+async def create_meeting_decision(
+    meeting_id: int,
+    payload: DecisionCreate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> DecisionResponse:
+    meeting = await get_meeting(db, meeting_id=meeting_id, user_id=current_user.id)
+    if not meeting:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Meeting not found")
+    decision = await create_decision(
+        db=db,
+        meeting_id=meeting_id,
+        text=payload.text,
+        type=payload.type,
+        timestamp_ms=payload.timestamp_ms,
+    )
+    return DecisionResponse.model_validate(decision)
+
+
+@router.delete(
+    "/api/meetings/{meeting_id}/decisions/{decision_id}",
+    summary="Delete a decision",
+    dependencies=[Depends(rate_limit(requests_per_minute=30))],
+)
+async def delete_meeting_decision(
+    meeting_id: int,
+    decision_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> dict[str, str]:
+    deleted = await delete_decision(db, decision_id=decision_id, user_id=current_user.id)
+    if not deleted:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Decision not found")
+    return {"status": "deleted", "decision_id": str(decision_id)}
+

@@ -22,12 +22,62 @@ async def get_user_by_email(db: AsyncSession, email: str) -> User | None:
     return result.scalar_one_or_none()
 
 
-async def create_user(db: AsyncSession, email: str, name: str) -> User:
+async def create_user(
+    db: AsyncSession,
+    email: str,
+    name: str,
+    google_id: str | None = None,
+    avatar_url: str | None = None,
+) -> User:
     """Create a new user. Caller must ensure email is unique."""
-    user = User(email=email, name=name)
+    user = User(
+        email=email,
+        name=name,
+        google_id=google_id,
+        avatar_url=avatar_url,
+    )
     db.add(user)
-    # Flush to get the auto-generated id without committing.
-    # The session's commit happens in get_db's context manager.
     await db.flush()
     await db.refresh(user)
     return user
+
+
+async def get_or_create_google_user(
+    db: AsyncSession,
+    google_id: str,
+    email: str,
+    name: str,
+    avatar_url: str | None = None,
+) -> User:
+    """
+    Find or create a user from Google OAuth profile.
+    Updates name/avatar_url on subsequent logins.
+    """
+    # 1. Look up by google_id
+    if google_id:
+        result = await db.execute(select(User).where(User.google_id == google_id))
+        user = result.scalar_one_or_none()
+        if user:
+            user.name = name or user.name
+            user.avatar_url = avatar_url or user.avatar_url
+            await db.flush()
+            return user
+
+    # 2. Look up by email
+    result = await db.execute(select(User).where(User.email == email))
+    user = result.scalar_one_or_none()
+    if user:
+        user.google_id = google_id or user.google_id
+        user.name = name or user.name
+        user.avatar_url = avatar_url or user.avatar_url
+        await db.flush()
+        return user
+
+    # 3. Create brand new user
+    return await create_user(
+        db=db,
+        email=email,
+        name=name,
+        google_id=google_id,
+        avatar_url=avatar_url,
+    )

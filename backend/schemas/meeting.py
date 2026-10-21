@@ -22,6 +22,9 @@ class MeetingResponse(BaseModel):
     user_id: int
     title: str
     status: MeetingStatus
+    started_at: datetime | None = None
+    ended_at: datetime | None = None
+    language: str | None = "en"
     audio_path: str | None = None
     duration_seconds: float | None = None
     error_message: str | None = None

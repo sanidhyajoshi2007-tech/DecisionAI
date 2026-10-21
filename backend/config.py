@@ -32,6 +32,21 @@ class Settings(BaseSettings):
     host: str = "127.0.0.1"
     port: int = 8000
 
+    # ── Security & Authentication ──
+    secret_key: str = "dev-secret-key-decisionai-super-safe-change-in-production"
+    session_cookie_name: str = "decisionai_session"
+    session_cookie_max_age_days: int = 14
+    session_cookie_samesite: str = "lax"
+    session_cookie_secure: bool = False
+    extension_token_expire_minutes: int = 60
+    google_client_id: str = ""
+    google_client_secret: str = ""
+    google_redirect_uri: str = "http://localhost:8000/auth/google/callback"
+
+
+    # ── Rate Limiting ──
+    rate_limit_per_minute: int = 60
+
     # ── Database ──
     # SQLite for prototype; swap to postgresql+asyncpg:// later.
     database_url: str = "sqlite+aiosqlite:///./decisionai.db"
