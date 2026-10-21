@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DecisionAI Recorder</title>
+    <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+    <div class="popup-container">
+        <!-- Header -->
+        <header class="popup-header">
+            <div class="brand">
+                <div class="brand-icon">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/>
+                        <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+                        <line x1="12" x2="12" y1="19" y2="22"/>
+                    </svg>
+                </div>
+                <div class="brand-text">
+                    <h1>DecisionAI</h1>
+                    <span class="version">Meet Recorder</span>
+                </div>
+            </div>
+            <div id="recordingBadge" class="rec-badge hidden">
+                <span class="pulsing-dot"></span>
+                <span>REC</span>
+            </div>
+        </header>
+
+        <!-- Google Meet Tab Warning / Notice -->
+        <div id="tabNotice" class="notice-card warning">
+            <div class="notice-icon">⚠️</div>
+            <div class="notice-content">
+                <p id="noticeText">Navigate to a <strong>meet.google.com</strong> tab to start recording.</p>
+            </div>
+        </div>
+
+        <!-- Recording Timer & Info (Visible when recording) -->
+        <div id="recordingDetails" class="recording-details hidden">
+            <div class="timer-box">
+                <span class="timer-label">Recording Duration</span>
+                <span id="recordingTimer" class="timer-digits">00:00</span>
+            </div>
+            <div class="active-meeting-info">
+                <span>Meeting ID: <strong id="activeMeetingId">#—</strong></span>
+                <span class="channels-tag">2 Ch (Tab + Mic)</span>
+            </div>
+        </div>
+
+        <!-- Meeting Title Input (Shown before recording) -->
+        <div id="inputSection" class="input-section">
+            <label for="meetingTitle">Meeting Title</label>
+            <input type="text" id="meetingTitle" placeholder="e.g. Sprint Planning, Client Review" value="Google Meet Call">
+        </div>
+
+        <!-- Action Controls -->
+        <div class="button-group">
+            <button id="startBtn" class="btn btn-primary" disabled>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                    <circle cx="12" cy="12" r="9"/>
+                </svg>
+                <span>Start Recording</span>
+            </button>
+            <button id="stopBtn" class="btn btn-danger hidden">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                    <rect x="6" y="6" width="12" height="12" rx="2"/>
+                </svg>
+                <span>Stop Recording</span>
+            </button>
+        </div>
+
+        <!-- Status & Feedback -->
+        <div id="statusMessage" class="status-message"></div>
+
+        <!-- Footer -->
+        <footer class="popup-footer">
+            <span class="backend-pill">
+                <span class="dot green"></span>
+                <span>Backend: localhost:8000</span>
+            </span>
+        </footer>
+    </div>
+
+    <script src="popup.js"></script>
+</body>
+</html>

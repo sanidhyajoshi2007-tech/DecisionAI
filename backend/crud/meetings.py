@@ -50,6 +50,21 @@ async def get_meeting(
     return result.scalar_one_or_none()
 
 
+async def get_meeting_by_id(
+    db: AsyncSession,
+    meeting_id: int,
+) -> Meeting | None:
+    """
+    Fetch a meeting by id directly, without user scoping.
+    Used for internal tasks, WebSocket recording, and completion endpoints.
+    """
+    result = await db.execute(
+        select(Meeting).where(Meeting.id == meeting_id)
+    )
+    return result.scalar_one_or_none()
+
+
+
 async def list_meetings(
     db: AsyncSession,
     user_id: int,
