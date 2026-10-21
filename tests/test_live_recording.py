@@ -77,12 +77,15 @@ def test_websocket_audio_streaming_and_finish():
                 b64_mic = base64.b64encode(one_sec_mic_pcm).decode("ascii")
                 ws.send_text(f'{{"channel": "mic", "data": "{b64_mic}"}}')
 
-            # 3. Finish recording
-            finish_res = sync_client.post(f"/meetings/{meeting_id}/finish")
-            assert finish_res.status_code == 200
-            finish_data = finish_res.json()
-            assert finish_data["status"] == "ready"
-            assert finish_data["meeting_id"] == meeting_id
+            # 3. Finish recording (mock background transcription to isolate endpoint test)
+            from unittest.mock import patch
+            with patch("backend.services.stt.process_meeting_transcription") as mock_transcribe:
+                finish_res = sync_client.post(f"/meetings/{meeting_id}/finish")
+                assert finish_res.status_code == 200
+                finish_data = finish_res.json()
+                assert finish_data["status"] == "ready"
+                assert finish_data["meeting_id"] == meeting_id
+                assert mock_transcribe.called
             # We sent 2 seconds of audio
             assert finish_data["duration_seconds"] >= 2.0
 
