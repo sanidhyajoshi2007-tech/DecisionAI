@@ -60,10 +60,9 @@ async def main():
         await conn.run_sync(Base.metadata.create_all)
 
     # 1. Create or fetch demo user and meeting in 'recording' state
+    from backend.auth import _get_or_create_dev_user
     async with async_session_factory() as db:
-        user = await get_user_by_email(db, "demo@decisionai.io")
-        if not user:
-            user = await create_user(db, email="demo@decisionai.io", name="Demo User")
+        user = await _get_or_create_dev_user(db)
         meeting = await create_meeting(
             db=db,
             user_id=user.id,
@@ -218,6 +217,10 @@ async def main():
     print("\n" + "=" * 65)
     print(f"  Final Meeting Status: [READY]")
     print(f"  View in Browser:      http://localhost:8000/meetings/{meeting_id}")
+    print("=" * 65)
+    print("  TIP: If your browser shows 'Site can't be reached', start the")
+    print("       backend server in another terminal:")
+    print("       .\\venv\\Scripts\\uvicorn backend.main:app --reload --host 127.0.0.1 --port 8000")
     print("=" * 65)
 
     await engine.dispose()

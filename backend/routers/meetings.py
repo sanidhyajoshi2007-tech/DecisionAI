@@ -288,6 +288,8 @@ async def get_meeting_audio_file(
 ):
     """Serve recorded WAV file for a channel (tab or mic), scoped to current_user."""
     meeting = await get_meeting(db, meeting_id=meeting_id, user_id=current_user.id)
+    if not meeting and settings.app_env == "development":
+        meeting = await get_meeting_by_id(db, meeting_id)
     if not meeting:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -317,6 +319,8 @@ async def view_meeting_page(
 ):
     """HTML Viewer opened in a new tab when recording completes."""
     meeting = await get_meeting(db, meeting_id=meeting_id, user_id=current_user.id)
+    if not meeting and settings.app_env == "development":
+        meeting = await get_meeting_by_id(db, meeting_id)
     if not meeting:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
