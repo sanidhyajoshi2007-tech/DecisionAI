@@ -1,5 +1,5 @@
 """
-Configuration — single source of truth for all settings.
+Configuration - single source of truth for all settings.
 
 Uses pydantic-settings to load from .env file and environment variables.
 Environment variables always override .env file values, which makes
@@ -18,7 +18,7 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
-        # Extra fields in .env won't crash the app — useful when other
+        # Extra fields in .env won't crash the app - useful when other
         # tools (Alembic, etc.) add their own env vars.
         extra="ignore",
     )

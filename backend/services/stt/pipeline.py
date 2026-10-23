@@ -264,6 +264,25 @@ async def process_meeting_transcription(
                     exc_info=True,
                 )
 
+        # Embed transcript chunks into ChromaDB for RAG
+        try:
+            from backend.services.rag.pipeline import index_meeting_transcript
+            async with session_factory() as db:
+                m_lookup = await get_meeting_by_id(db, meeting_id)
+                u_id = m_lookup.user_id if m_lookup else 1
+                await index_meeting_transcript(
+                    db=db,
+                    meeting_id=meeting_id,
+                    user_id=u_id,
+                    settings=settings,
+                )
+            logger.info(f"[RAG Pipeline] Meeting #{meeting_id} chunks indexed to ChromaDB.")
+        except Exception as rag_err:
+            logger.warning(
+                f"[RAG Pipeline] Meeting #{meeting_id} indexing warning: {rag_err}",
+                exc_info=True,
+            )
+
         # Mark meeting status as READY
         async with session_factory() as db:
             await update_meeting_status(db, meeting_id, MeetingStatus.READY)

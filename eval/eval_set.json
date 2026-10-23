@@ -1,0 +1,202 @@
+[
+  {
+    "id": 1,
+    "question": "What was the final decision on the backend database migration?",
+    "category": "decision",
+    "language": "en",
+    "requires_decision_table": true,
+    "expected_found": true,
+    "expected_keywords": ["database", "sqlite", "alembic", "migration"],
+    "ground_truth_answer": "The team decided to use SQLite with Alembic migrations for the prototype phase and plan PostgreSQL migration later."
+  },
+  {
+    "id": 2,
+    "question": "What action items were assigned for the authentication flow?",
+    "category": "action_item",
+    "language": "en",
+    "requires_decision_table": true,
+    "expected_found": true,
+    "expected_keywords": ["google oauth", "httponly", "session cookie", "extension token"],
+    "ground_truth_answer": "Implement Google OAuth 2.0 with httpOnly session cookies and an extension token issuance endpoint."
+  },
+  {
+    "id": 3,
+    "question": "Aakhri faisla kya liya gaya tha architecture ke baare mein?",
+    "category": "decision",
+    "language": "hinglish",
+    "requires_decision_table": true,
+    "expected_found": true,
+    "expected_keywords": ["architecture", "faisla", "fastapi", "extension"],
+    "ground_truth_answer": "Architecture ke liye FastAPI backend aur Manifest V3 Chrome extension with AudioWorklet choose kiya gaya."
+  },
+  {
+    "id": 4,
+    "question": "Q4 sprint release date kya decide hui thi?",
+    "category": "decision",
+    "language": "hinglish",
+    "requires_decision_table": true,
+    "expected_found": true,
+    "expected_keywords": ["release", "date", "november", "sprint"],
+    "ground_truth_answer": "Q4 release date November ke first week mein scheduled ki gayi hai."
+  },
+  {
+    "id": 5,
+    "question": "What rate limiting strategy was chosen for the API?",
+    "category": "technical_fact",
+    "language": "en",
+    "requires_decision_table": false,
+    "expected_found": true,
+    "expected_keywords": ["in-memory", "rate limit", "sliding window", "redis"],
+    "ground_truth_answer": "An in-memory sliding window rate limiter without Redis was chosen to avoid external infrastructure dependencies."
+  },
+  {
+    "id": 6,
+    "question": "Did we decide to use Redis or in-memory caching?",
+    "category": "decision",
+    "language": "en",
+    "requires_decision_table": true,
+    "expected_found": true,
+    "expected_keywords": ["in-memory", "redis", "no external dependency"],
+    "ground_truth_answer": "The decision was to use an in-memory dictionary cache with lock-based cleanup rather than external Redis."
+  },
+  {
+    "id": 7,
+    "question": "What client request was accepted regarding invoice exports?",
+    "category": "action_item",
+    "language": "en",
+    "requires_decision_table": true,
+    "expected_found": true,
+    "expected_keywords": ["invoice", "csv", "export", "accepted"],
+    "ground_truth_answer": "The client request to add direct CSV export alongside PDF was accepted with high priority."
+  },
+  {
+    "id": 8,
+    "question": "What sample rate is used for recording audio in the extension?",
+    "category": "technical_fact",
+    "language": "en",
+    "requires_decision_table": false,
+    "expected_found": true,
+    "expected_keywords": ["16 khz", "16000", "mono", "audioworklet"],
+    "ground_truth_answer": "Audio is resampled down to 16 kHz mono 16-bit PCM using the hardware-accelerated AudioContext."
+  },
+  {
+    "id": 9,
+    "question": "Which speech-to-text provider is recommended for Indian regional accents?",
+    "category": "technical_fact",
+    "language": "en",
+    "requires_decision_table": false,
+    "expected_found": true,
+    "expected_keywords": ["sarvam", "saaras:v4", "codemix", "hindi"],
+    "ground_truth_answer": "Sarvam AI with the saaras:v4 model in codemix mode is configured for Indian accents and regional dialects."
+  },
+  {
+    "id": 10,
+    "question": "When is the prototype demo scheduled?",
+    "category": "decision",
+    "language": "en",
+    "requires_decision_table": true,
+    "expected_found": true,
+    "expected_keywords": ["demo", "friday", "client", "scheduled"],
+    "ground_truth_answer": "The prototype demo was scheduled for Friday afternoon after internal QA sign-off."
+  },
+  {
+    "id": 11,
+    "question": "Extension audio capture mein tab audio mute issue ko kaise solve kiya?",
+    "category": "technical_fact",
+    "language": "hinglish",
+    "requires_decision_table": false,
+    "expected_found": true,
+    "expected_keywords": ["destination", "audiocontext", "tabcapture", "passthrough"],
+    "ground_truth_answer": "Tab audio ko audioCtx.destination se connect karke passthrough enable kiya gaya taaki user call sun sake."
+  },
+  {
+    "id": 12,
+    "question": "What was decided regarding the httpOnly cookie security settings?",
+    "category": "decision",
+    "language": "en",
+    "requires_decision_table": true,
+    "expected_found": true,
+    "expected_keywords": ["httponly", "samesite", "secure", "cookie"],
+    "ground_truth_answer": "The session token must be stored with httpOnly=True and samesite='lax' to protect against XSS."
+  },
+  {
+    "id": 13,
+    "question": "What was decided about the Kubernetes cluster autoscaler?",
+    "category": "negative_control",
+    "language": "en",
+    "requires_decision_table": true,
+    "expected_found": false,
+    "expected_keywords": ["not found", "no relevant", "unrecorded"],
+    "ground_truth_answer": "No discussion or decision regarding Kubernetes cluster autoscaler was found in the recorded meetings."
+  },
+  {
+    "id": 14,
+    "question": "Was the proposal to use third-party UI component libraries accepted or rejected?",
+    "category": "decision",
+    "language": "en",
+    "requires_decision_table": true,
+    "expected_found": true,
+    "expected_keywords": ["rejected", "vanilla", "no ui kits", "frameworks"],
+    "ground_truth_answer": "The proposal was rejected in favor of pure vanilla HTML, CSS, and JavaScript with custom design tokens."
+  },
+  {
+    "id": 15,
+    "question": "What vector database was chosen for storing meeting transcript chunks?",
+    "category": "technical_fact",
+    "language": "en",
+    "requires_decision_table": false,
+    "expected_found": true,
+    "expected_keywords": ["chromadb", "embeddings", "vector store"],
+    "ground_truth_answer": "ChromaDB with persistent local storage was selected for transcript chunk vector storage."
+  },
+  {
+    "id": 16,
+    "question": "Hindi transcripts ke liye kaunsa normalizer use hota hai?",
+    "category": "technical_fact",
+    "language": "hinglish",
+    "requires_decision_table": false,
+    "expected_found": true,
+    "expected_keywords": ["nfc", "unicode", "nukta", "danda", "normalizer"],
+    "ground_truth_answer": "Unicode NFC normalization aur nukta danda cleanup normalizer use kiya jaata hai."
+  },
+  {
+    "id": 17,
+    "question": "What tasks are currently marked as pending status?",
+    "category": "action_item",
+    "language": "en",
+    "requires_decision_table": true,
+    "expected_found": true,
+    "expected_keywords": ["pending", "status", "action items"],
+    "ground_truth_answer": "Pending action items include client sign-off on pricing and the final security audit."
+  },
+  {
+    "id": 18,
+    "question": "What are the immediate next steps before the client demo?",
+    "category": "action_item",
+    "language": "en",
+    "requires_decision_table": true,
+    "expected_found": true,
+    "expected_keywords": ["next steps", "demo", "testing", "evaluation"],
+    "ground_truth_answer": "Run the RAG evaluation suite, verify Google Meet tab capture audio passthrough, and deploy the demo build."
+  },
+  {
+    "id": 19,
+    "question": "Which languages does our meeting transcription pipeline support?",
+    "category": "technical_fact",
+    "language": "en",
+    "requires_decision_table": false,
+    "expected_found": true,
+    "expected_keywords": ["english", "hindi", "hinglish", "multilingual"],
+    "ground_truth_answer": "The pipeline supports English, Hindi (Devanagari), and conversational Hinglish code-switching."
+  },
+  {
+    "id": 20,
+    "question": "When is the next weekly engineering sync scheduled?",
+    "category": "decision",
+    "language": "en",
+    "requires_decision_table": true,
+    "expected_found": true,
+    "expected_keywords": ["weekly sync", "scheduled", "monday", "10 am"],
+    "ground_truth_answer": "The next engineering sync was agreed to occur every Monday at 10:00 AM."
+  }
+]

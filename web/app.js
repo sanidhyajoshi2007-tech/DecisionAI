@@ -140,6 +140,63 @@ const API = {
     }
     return await res.json();
   },
+
+  async askStream(question, meetingId = null, onToken, onCitations, onDone, onError) {
+    try {
+      const payload = {
+        question: question.trim(),
+        meeting_id: meetingId ? parseInt(meetingId, 10) : null,
+        stream: true,
+      };
+
+      const res = await fetch('/api/ask', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+
+      if (!res.ok) {
+        const errJson = await res.json().catch(() => ({}));
+        throw new Error(errJson.detail || `Server returned error (${res.status})`);
+      }
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder('utf-8');
+      let buffer = '';
+
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n\n');
+        buffer = lines.pop();
+
+        for (const line of lines) {
+          const trimmed = line.trim();
+          if (trimmed.startsWith('data: ')) {
+            try {
+              const data = JSON.parse(trimmed.slice(6));
+              if (data.token && onToken) {
+                onToken(data.token);
+              }
+              if (data.citations && onCitations) {
+                onCitations(data.citations, data.decisions, data.intent);
+              }
+              if (data.done && onDone) {
+                onDone();
+              }
+            } catch (jsonErr) {
+              // skip parse error
+            }
+          }
+        }
+      }
+      if (onDone) onDone();
+    } catch (err) {
+      if (onError) onError(err);
+    }
+  },
 };
 
 // Formatting Utilities
@@ -501,6 +558,30 @@ async function loadTranscriptData(meetingId) {
     }
 
     renderTranscriptSegments(currentTranscriptSegments);
+
+    // Auto-scroll and seek if ?t= param was provided in URL (from citation click)
+    const urlParams = new URLSearchParams(window.location.search);
+    const tParam = urlParams.get('t');
+    if (tParam) {
+      const tNum = parseInt(tParam, 10);
+      const targetSec = tNum > 1000 ? tNum / 1000 : parseFloat(tParam);
+      if (!isNaN(targetSec)) {
+        setTimeout(() => {
+          let bestSeg = currentTranscriptSegments[0];
+          let bestDiff = 999999;
+          for (const s of currentTranscriptSegments) {
+            const diff = Math.abs((s.start_time || 0) - targetSec);
+            if (diff < bestDiff) {
+              bestDiff = diff;
+              bestSeg = s;
+            }
+          }
+          if (bestSeg) {
+            highlightSegment(bestSeg.id, targetSec);
+          }
+        }, 350);
+      }
+    }
   } catch (err) {
     root.innerHTML = `
       <div class="state-box state-error">
@@ -838,6 +919,149 @@ function renderMeetingError(message) {
         </a>
       </div>
     `;
+  }
+}
+
+// Ask AI Page Controller
+async function initAskAIPage() {
+  const user = await API.fetchCurrentUser();
+  const userSlot = document.getElementById('user-profile-slot');
+  if (userSlot) {
+    if (user && user.email) {
+      userSlot.innerHTML = `
+        <span style="font-size: var(--text-xs); color: var(--text-secondary);">${user.name || user.email}</span>
+        <button id="logout-btn" class="btn btn-secondary btn-sm" type="button">Logout</button>
+      `;
+      document.getElementById('logout-btn')?.addEventListener('click', API.logout);
+    } else {
+      userSlot.innerHTML = `<a href="/web/login.html" class="btn btn-primary btn-sm">Login</a>`;
+    }
+  }
+
+  // Populate meeting scope dropdown
+  const scopeSelect = document.getElementById('meeting-scope-select');
+  if (scopeSelect) {
+    try {
+      const data = await API.listMeetings(1, 100);
+      const meetings = data.meetings || [];
+      meetings.forEach((m) => {
+        const opt = document.createElement('option');
+        opt.value = String(m.id);
+        const title = m.title || `Meeting #${m.id}`;
+        opt.textContent = `${title} (${formatDateTime(m.created_at)})`;
+        scopeSelect.appendChild(opt);
+      });
+    } catch {
+      // Fallback silently if meeting list fails
+    }
+  }
+
+  // Form submit
+  const form = document.getElementById('chat-form');
+  const input = document.getElementById('chat-input');
+  const sendBtn = document.getElementById('chat-send-btn');
+  const messagesContainer = document.getElementById('chat-messages');
+  const clearBtn = document.getElementById('clear-chat-btn');
+
+  if (clearBtn && messagesContainer) {
+    clearBtn.addEventListener('click', () => {
+      messagesContainer.innerHTML = `
+        <div class="chat-bubble chat-bubble-assistant">
+          <div class="chat-role-label">DecisionAI Assistant</div>
+          <div>Chat history cleared. You can ask a new question about your meeting archive.</div>
+        </div>
+      `;
+    });
+  }
+
+  if (form && input && sendBtn && messagesContainer) {
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const question = input.value.trim();
+      if (!question) return;
+
+      const meetingId = scopeSelect ? scopeSelect.value : null;
+
+      // 1. Append User Message
+      const userBubble = document.createElement('div');
+      userBubble.className = 'chat-bubble chat-bubble-user';
+      userBubble.innerHTML = `
+        <div class="chat-role-label">You</div>
+        <div>${escapeHtml(question)}</div>
+      `;
+      messagesContainer.appendChild(userBubble);
+      input.value = '';
+      sendBtn.disabled = true;
+
+      // 2. Append Assistant Placeholder Bubble with Streaming Cursor
+      const assistantBubble = document.createElement('div');
+      assistantBubble.className = 'chat-bubble chat-bubble-assistant';
+      assistantBubble.innerHTML = `
+        <div class="chat-role-label">DecisionAI Assistant</div>
+        <div class="assistant-content"><span class="streaming-cursor"></span></div>
+        <div class="citation-container" style="display: none;">
+          <div class="citation-title">Grounded Citations</div>
+          <div class="citation-chips"></div>
+        </div>
+      `;
+      messagesContainer.appendChild(assistantBubble);
+      messagesContainer.scrollTop = messagesContainer.scrollHeight;
+
+      const contentEl = assistantBubble.querySelector('.assistant-content');
+      const citationContainer = assistantBubble.querySelector('.citation-container');
+      const chipsEl = assistantBubble.querySelector('.citation-chips');
+
+      let accumulatedText = '';
+
+      await API.askStream(
+        question,
+        meetingId,
+        (token) => {
+          accumulatedText += token;
+          contentEl.innerHTML = `${escapeHtml(accumulatedText)}<span class="streaming-cursor"></span>`;
+          messagesContainer.scrollTop = messagesContainer.scrollHeight;
+        },
+        (citations) => {
+          contentEl.innerHTML = escapeHtml(accumulatedText);
+
+          if (citations && citations.length > 0) {
+            citationContainer.style.display = 'block';
+            chipsEl.innerHTML = citations.map((c) => {
+              const timeDisplay = c.timestamp || '00:00';
+              const meetingTitle = c.meeting_title || `Meeting #${c.meeting_id}`;
+              const targetUrl = `/web/meeting.html?id=${c.meeting_id}&t=${c.start_ms}`;
+
+              return `
+                <a href="${targetUrl}" class="citation-chip" title="Click to view transcript excerpt in ${escapeHtml(meetingTitle)}">
+                  <span>${escapeHtml(meetingTitle)}</span>
+                  <span class="citation-time">@ ${timeDisplay}</span>
+                  ${getSvgArrow()}
+                </a>
+              `;
+            }).join('');
+          }
+          messagesContainer.scrollTop = messagesContainer.scrollHeight;
+        },
+        () => {
+          contentEl.innerHTML = escapeHtml(accumulatedText);
+          sendBtn.disabled = false;
+          input.focus();
+        },
+        (err) => {
+          contentEl.innerHTML = `<span style="color: var(--accent-complement);">Error: ${escapeHtml(err.message)}</span>`;
+          sendBtn.disabled = false;
+        }
+      );
+    });
+  }
+}
+
+function setQueryAndSubmit(queryText) {
+  const input = document.getElementById('chat-input');
+  const form = document.getElementById('chat-form');
+  if (input && form) {
+    input.value = queryText;
+    form.dispatchEvent(new Event('submit', { cancelable: true }));
   }
 }
 

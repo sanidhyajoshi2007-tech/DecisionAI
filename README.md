@@ -193,6 +193,17 @@ Every text element and interactive state meets or exceeds the WCAG AA contrast s
 - Binary WebSocket streaming to `ws://localhost:8000/ws/meetings/{id}`
 - Two separate 16 kHz WAV recordings per session: `{id}_tab.wav` and `{id}_mic.wav`
 
+### Phase 7: RAG and Meeting Intelligence
+- Speaker-turn transcript chunking (300 to 500 tokens) with time-window segmentation
+- Persistent ChromaDB vector store with strict multi-tenant `user_id` query scoping
+- Local multilingual sentence embeddings (`paraphrase-multilingual-MiniLM-L12-v2`) with deterministic offline fallback
+- Intent classification separating decision lookups from general dialogue questions
+- SQL `Decision` table lookups for latest agreements and action items
+- Hybrid retrieval combining dense vector similarity with sparse multilingual BM25 (Reciprocal Rank Fusion)
+- LLM response synthesis with grounded meeting, date, and timestamp citations
+- Live streaming Ask AI chat interface (`POST /api/ask?stream=true`) with clickable citations that seek audio and highlight dialogue
+- Quantitative RAG evaluation suite (`scripts/evaluate_rag.py`) scoring intent accuracy, keyword recall, and citation validity across 20 test pairs
+
 ---
 
 ## How to Run
@@ -212,4 +223,7 @@ uvicorn backend.main:app --reload
 
 # Run test suite
 pytest -v
+
+# Run RAG evaluation suite
+python scripts/evaluate_rag.py
 ```

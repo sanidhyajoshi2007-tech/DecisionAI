@@ -1,22 +1,26 @@
 """
-Pydantic schemas package — re-exports all request/response models.
+Pydantic schemas package - re-exports all request/response models.
 """
 
 from backend.schemas.user import UserCreate, UserResponse, ExtensionTokenResponse
 from backend.schemas.meeting import (
     MeetingCreate,
+    MeetingUpdate,
     MeetingResponse,
     MeetingListResponse,
     TranscriptSegmentResponse,
     TranscriptResponse,
-    AskRequest,
-    SourceSegment,
-    AskResponse,
 )
 from backend.schemas.decision import (
     DecisionCreate,
     DecisionResponse,
     DecisionListResponse,
+)
+from backend.schemas.rag import (
+    AskRequest,
+    AskResponse,
+    Citation,
+    DecisionItem,
 )
 
 __all__ = [
@@ -24,14 +28,16 @@ __all__ = [
     "UserResponse",
     "ExtensionTokenResponse",
     "MeetingCreate",
+    "MeetingUpdate",
     "MeetingResponse",
     "MeetingListResponse",
     "TranscriptSegmentResponse",
     "TranscriptResponse",
-    "AskRequest",
-    "SourceSegment",
-    "AskResponse",
     "DecisionCreate",
     "DecisionResponse",
     "DecisionListResponse",
+    "AskRequest",
+    "AskResponse",
+    "Citation",
+    "DecisionItem",
 ]

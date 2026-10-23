@@ -42,137 +42,87 @@
     </div>
 
     <!-- Title and Subtitle -->
-    <div style="margin-bottom: var(--space-8);">
+    <div style="margin-bottom: var(--space-6);">
       <h1 style="margin-bottom: var(--space-2);">Ask AI Assistant</h1>
       <p style="color: var(--text-secondary); max-width: 720px;">
-        Search across recorded conversations, verify discussion points, and retrieve sourced citations from meeting transcripts.
+        Search across recorded conversations, query decisions and action items, and retrieve grounded answers with clickable citations.
       </p>
     </div>
 
-    <!-- Bento Grid Layout -->
-    <div class="bento-grid">
-      <!-- Card 1: Interface Status -->
-      <section class="bento-card col-span-8" aria-labelledby="status-card-title">
-        <div class="bento-header">
-          <div>
-            <h2 id="status-card-title" class="bento-title">Phase 7 Implementation Status</h2>
-            <div class="bento-caption">Conversational retrieval-augmented generation engine</div>
-          </div>
-          <span class="badge badge-processing">Scheduled for Phase 7</span>
+    <!-- Chat Container -->
+    <div class="chat-wrapper">
+      <!-- Toolbar: Meeting Scope Selector and Actions -->
+      <div class="chat-toolbar">
+        <div style="display: flex; align-items: center; gap: var(--space-3); flex-wrap: wrap;">
+          <label for="meeting-scope-select" style="font-size: var(--text-xs); font-weight: 700; text-transform: uppercase; color: var(--text-muted);">
+            Scope:
+          </label>
+          <select id="meeting-scope-select" class="form-input" style="width: auto; min-width: 240px; padding: var(--space-2) var(--space-3); font-size: var(--text-xs);">
+            <option value="">All Recorded Meetings</option>
+          </select>
+          <span id="rag-index-status" style="font-size: var(--text-xs); color: var(--text-muted);">
+            Hybrid Search Active (ChromaDB + BM25)
+          </span>
         </div>
-        <p style="font-size: var(--text-sm); line-height: 1.6; margin-bottom: var(--space-4);">
-          The interactive chat interface connects directly to your meeting database and vector store. When completed in Phase 7, this workspace will generate direct answers backed by timestamped citations from your transcripts.
-        </p>
-        <div style="background-color: var(--bg-surface-raised); border: 1px solid var(--border-subtle); border-radius: var(--radius-md); padding: var(--space-4); margin-bottom: var(--space-6);">
-          <div style="font-size: var(--text-xs); font-weight: 700; text-transform: uppercase; color: var(--text-muted); margin-bottom: var(--space-2);">
-            Architecture Pipeline
-          </div>
-          <p style="font-size: var(--text-sm); color: var(--text-secondary); margin: 0;">
-            ChromaDB embeddings database, Gemini structured retrieval, and multi-speaker transcript chunking with start and end timestamps.
-          </p>
-        </div>
-
-        <h3 style="font-size: var(--text-base); margin-bottom: var(--space-3);">Upcoming Capabilities</h3>
-        <ul style="margin: 0; padding-left: var(--space-5); color: var(--text-secondary); font-size: var(--text-sm); line-height: 1.8;">
-          <li>Semantic search across full multi-speaker meeting transcripts and decisions</li>
-          <li>Direct timestamp citations linking to exact dialogue lines in the meeting audio player</li>
-          <li>Cross-meeting question answering and synthesis across multiple sessions</li>
-          <li>Action item tracking with status verification (accepted, rejected, pending)</li>
-        </ul>
-      </section>
-
-      <!-- Card 2: Assistant Scope & Specs -->
-      <section class="bento-card col-span-4" aria-labelledby="specs-card-title">
-        <div class="bento-header">
-          <h2 id="specs-card-title" class="bento-title">System Scope</h2>
-        </div>
-        <div style="display: flex; flex-direction: column; gap: var(--space-4); font-size: var(--text-sm);">
-          <div>
-            <div style="font-size: var(--text-xs); color: var(--text-muted); text-transform: uppercase; font-weight: 700; margin-bottom: 2px;">
-              Data Isolation
-            </div>
-            <div style="color: var(--text-secondary);">
-              Every query is scoped strictly to your authenticated user account.
-            </div>
-          </div>
-          <div>
-            <div style="font-size: var(--text-xs); color: var(--text-muted); text-transform: uppercase; font-weight: 700; margin-bottom: 2px;">
-              Supported Languages
-            </div>
-            <div style="color: var(--text-secondary);">
-              English, Hindi (Devanagari), and conversational Hinglish.
-            </div>
-          </div>
-          <div>
-            <div style="font-size: var(--text-xs); color: var(--text-muted); text-transform: uppercase; font-weight: 700; margin-bottom: 2px;">
-              Citation Grounding
-            </div>
-            <div style="color: var(--text-secondary);">
-              Answers cite meeting title, speaker channel, and exact second offset.
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <!-- Card 3: Preview Box (Full Width) -->
-      <section class="bento-card col-span-12" aria-labelledby="preview-card-title">
-        <div class="bento-header">
-          <div>
-            <h2 id="preview-card-title" class="bento-title">Query Preview</h2>
-            <div class="bento-caption">Simulated input field ahead of Phase 7 chat engine release</div>
-          </div>
-        </div>
-        <div style="display: flex; gap: var(--space-3); flex-wrap: wrap;">
-          <input
-            type="text"
-            class="form-input"
-            style="flex: 1; min-width: 260px;"
-            disabled
-            placeholder="Phase 7 RAG query interface will activate here..."
-            aria-label="Ask AI query preview"
-          >
-          <button class="btn btn-secondary" disabled type="button">
-            Search Archive
+        <div style="display: flex; gap: var(--space-2);">
+          <button id="clear-chat-btn" class="btn btn-secondary btn-sm" type="button">
+            Clear Chat
           </button>
         </div>
-        <p style="font-size: var(--text-xs); color: var(--text-muted); margin-top: var(--space-3); margin-bottom: 0;">
-          Interactive queries will become available once the Phase 7 vector store integration is complete.
-        </p>
-      </section>
-    </div>
+      </div>
 
-    <!-- Return Link -->
-    <div style="margin-top: var(--space-8);">
-      <a href="/web/index.html" class="btn btn-secondary link-arrow">
-        Return to Dashboard
-        <svg class="arrow-icon" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
-          <path d="M3 8h10M9 4l4 4-4 4"/>
-        </svg>
-      </a>
+      <!-- Messages Thread -->
+      <div id="chat-messages" class="chat-messages" role="log" aria-live="polite">
+        <!-- Initial Welcome Message -->
+        <div class="chat-bubble chat-bubble-assistant">
+          <div class="chat-role-label">DecisionAI Assistant</div>
+          <div>
+            Hello. I can answer questions across your recorded meetings, find the latest decisions and action items, and locate specific discussions. Ask a question below to search the archive.
+          </div>
+        </div>
+      </div>
+
+      <!-- Suggested Queries Bar -->
+      <div class="suggestion-bar" aria-label="Suggested questions">
+        <button class="suggestion-btn" type="button" onclick="setQueryAndSubmit('What was the latest decision?')">
+          What was the latest decision?
+        </button>
+        <button class="suggestion-btn" type="button" onclick="setQueryAndSubmit('What are the pending action items?')">
+          What are the pending action items?
+        </button>
+        <button class="suggestion-btn" type="button" onclick="setQueryAndSubmit('What was discussed regarding the project timeline?')">
+          What was discussed regarding the project timeline?
+        </button>
+        <button class="suggestion-btn" type="button" onclick="setQueryAndSubmit('Kya koi naya faisla liya gaya?')">
+          Kya koi naya faisla liya gaya?
+        </button>
+      </div>
+
+      <!-- Input Form -->
+      <form id="chat-form" style="display: flex; gap: var(--space-3); align-items: center;">
+        <input
+          type="text"
+          id="chat-input"
+          class="form-input"
+          placeholder="Ask a question about your meetings..."
+          required
+          autocomplete="off"
+          style="flex: 1;"
+        >
+        <button type="submit" id="chat-send-btn" class="btn btn-primary link-arrow">
+          <span>Ask AI</span>
+          <svg class="arrow-icon" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
+            <path d="M3 8h10M9 4l4 4-4 4"/>
+          </svg>
+        </button>
+      </form>
     </div>
   </main>
 
   <script src="/web/app.js"></script>
   <script>
-    document.addEventListener('DOMContentLoaded', async () => {
-      initTheme();
-      document.getElementById('theme-toggle-btn')?.addEventListener('click', toggleTheme);
-
-      const user = await API.fetchCurrentUser();
-      const userSlot = document.getElementById('user-profile-slot');
-      if (userSlot) {
-        if (user && user.email) {
-          userSlot.innerHTML = `
-            <span style="font-size: var(--text-xs); color: var(--text-secondary);">${user.name || user.email}</span>
-            <button id="logout-btn" class="btn btn-secondary btn-sm" type="button">Logout</button>
-          `;
-          document.getElementById('logout-btn')?.addEventListener('click', API.logout);
-        } else {
-          userSlot.innerHTML = `
-            <a href="/web/login.html" class="btn btn-primary btn-sm">Login</a>
-          `;
-        }
-      }
+    document.addEventListener('DOMContentLoaded', () => {
+      initAskAIPage();
     });
   </script>
 </body>

@@ -72,6 +72,9 @@ Chrome MV3 Extension                  FastAPI Backend                Browser Fro
 | `POST` | `/meetings/{id}/finish` | Finalizes recording, computes duration, marks status as `ready` |
 | `GET` | `/meetings/{id}` | HTML viewer with audio players for both tab and microphone recordings |
 | `GET` | `/meetings/{id}/audio/{channel}` | Streams recorded WAV audio (`tab` or `mic`) |
+| `POST` | `/ask` / `/api/ask` | RAG query endpoint with optional meeting_id scope and SSE streaming |
+| `POST` | `/api/rag/index-all` | Batch index all ready meeting transcripts into ChromaDB |
+| `GET` | `/api/rag/status` | Vector store index status and chunk count |
 | `GET` | `/api/health` | Health check endpoint |
 
 ---
@@ -101,12 +104,44 @@ DecisionAI features a pluggable, multi-provider transcription pipeline in `backe
 
 ---
 
+## Retrieval-Augmented Generation (RAG) Architecture
+
+DecisionAI features an intelligent RAG pipeline in `backend/services/rag/`:
+
+### 1. Speaker-Turn Chunking & ChromaDB
+- Transcripts are grouped by speaker turns and time windows into 300 to 500 token chunks.
+- Large turns are partitioned at sentence boundaries. Inactive pauses exceeding 45 seconds force chunk breaks.
+- Chunks are embedded into ChromaDB with metadata: `user_id`, `meeting_id`, `date`, `speakers`, `start_ms`.
+- Local multilingual embeddings utilize `paraphrase-multilingual-MiniLM-L12-v2` with deterministic offline fallback.
+- Multi-tenant data isolation strictly enforces `user_id` filtering on every vector query.
+
+### 2. Intent Classification & SQL Decision Lookup
+- Queries are classified into `decision_lookup` and `general_qa`.
+- Questions regarding final decisions, action items, or conclusions query the SQL `Decision` table sorted by date.
+- Scoped to the authenticated `user_id` and optional `meeting_id`.
+
+### 3. Hybrid Search (Vector + BM25)
+- Vector similarity search retrieves semantic matches from ChromaDB.
+- Sparse BM25 indexing supports English, Hindi (Devanagari), and Hinglish tokens.
+- Reciprocal Rank Fusion (RRF with k=60) merges sparse and dense rankings.
+
+### 4. Grounded Citations & Interactive Chat UI
+- Answers cite specific meeting titles, dates, and MM:SS timestamps.
+- Streaming responses delivered via Server-Sent Events (`POST /api/ask?stream=true`).
+- Clicking a citation chip in the Ask AI chat navigates to the meeting player, seeks both audio channels, and highlights the dialogue segment.
+
+---
+
 ## Testing Guidelines
 
 ```bash
 # Run pytest test suite
 .\venv\Scripts\pytest -v
 
+# Run RAG evaluation suite (20 Q&A pairs)
+.\venv\Scripts\python scripts/evaluate_rag.py
+
 # Run backend development server
 .\venv\Scripts\uvicorn backend.main:app --reload --host 127.0.0.1 --port 8000
 ```
+
