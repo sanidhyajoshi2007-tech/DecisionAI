@@ -238,8 +238,16 @@ async function initDashboardPage() {
     // Update Stats
     const totalCount = data.total || meetings.length;
     let totalSeconds = 0;
+    let readyCount = 0;
+    let processingCount = 0;
+    let failedCount = 0;
+
     meetings.forEach((m) => {
       if (m.duration_seconds) totalSeconds += m.duration_seconds;
+      const s = (m.status || '').toLowerCase();
+      if (s === 'ready') readyCount++;
+      else if (s === 'processing' || s === 'uploading' || s === 'recording') processingCount++;
+      else if (s === 'failed' || s === 'error') failedCount++;
     });
 
     if (statsCountEl) statsCountEl.textContent = String(totalCount);
@@ -247,6 +255,12 @@ async function initDashboardPage() {
       const hrs = (totalSeconds / 3600).toFixed(1);
       statsHoursEl.textContent = `${hrs}h`;
     }
+    const readyEl = document.getElementById('stat-ready-count');
+    const processingEl = document.getElementById('stat-processing-count');
+    const failedEl = document.getElementById('stat-failed-count');
+    if (readyEl) readyEl.textContent = String(readyCount);
+    if (processingEl) processingEl.textContent = String(processingCount);
+    if (failedEl) failedEl.textContent = String(failedCount);
 
     // Empty State
     if (meetings.length === 0) {

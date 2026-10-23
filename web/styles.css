@@ -407,6 +407,8 @@ a:hover {
 .table-wrapper {
   width: 100%;
   overflow-x: auto;
+  overflow-y: auto;
+  max-height: 520px;
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-md);
 }
@@ -424,6 +426,10 @@ thead {
 }
 
 th {
+  position: sticky;
+  top: 0;
+  background-color: var(--bg-surface-raised);
+  z-index: 2;
   padding: var(--space-3) var(--space-4);
   font-weight: 600;
   color: var(--text-secondary);
