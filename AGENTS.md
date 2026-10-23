@@ -1,4 +1,4 @@
-# DecisionAI — Agent & Architecture Guide
+# DecisionAI: Agent & Architecture Guide
 
 ## Overview
 
