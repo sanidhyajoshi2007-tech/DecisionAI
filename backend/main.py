@@ -84,6 +84,11 @@ app.include_router(meetings_router)
 # Mounted LAST so /api/* routes are matched before falling through
 # to the static file handler. html=True serves index.html for "/".
 
+web_dir = Path(__file__).parent.parent / "web"
 frontend_dir = Path(__file__).parent.parent / "frontend"
-if frontend_dir.exists():
+
+if web_dir.exists():
+    app.mount("/web", StaticFiles(directory=str(web_dir), html=True), name="web")
+    app.mount("/", StaticFiles(directory=str(web_dir), html=True), name="frontend")
+elif frontend_dir.exists():
     app.mount("/", StaticFiles(directory=str(frontend_dir), html=True), name="frontend")

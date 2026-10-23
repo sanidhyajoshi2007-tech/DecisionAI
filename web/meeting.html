@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Meeting Details - DecisionAI</title>
+  <link rel="stylesheet" href="/web/styles.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+</head>
+<body>
+  <!-- Header -->
+  <header class="site-header">
+    <div class="header-container">
+      <a href="/web/index.html" class="brand-link">
+        <div class="brand-mark">DA</div>
+        <span class="brand-title">DecisionAI</span>
+      </a>
+      <div class="nav-actions">
+        <button id="theme-toggle-btn" class="btn-icon" type="button" aria-label="Toggle Theme">
+          <svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor" aria-hidden="true">
+            <circle cx="8" cy="8" r="3"/>
+            <path d="M8 1v2M8 13v2M1 8h2M13 8h2M3 3l1.5 1.5M11.5 11.5L13 13M3 13l1.5-1.5M11.5 4.5L13 3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+          </svg>
+        </button>
+        <div id="user-profile-slot" style="display: flex; align-items: center; gap: var(--space-3);"></div>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Content -->
+  <main class="main-content" id="meeting-content-root">
+    <!-- Breadcrumb -->
+    <div style="margin-bottom: var(--space-4);">
+      <a href="/web/index.html" class="link-arrow" style="font-size: var(--text-sm); font-weight: 600; color: var(--text-secondary);">
+        <svg class="arrow-icon" style="transform: rotate(180deg);" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
+          <path d="M3 8h10M9 4l4 4-4 4"/>
+        </svg>
+        Back to Dashboard
+      </a>
+    </div>
+
+    <!-- Meeting Title & Action Bar -->
+    <div style="display: flex; justify-content: space-between; align-items: flex-start; flex-wrap: wrap; gap: var(--space-4); margin-bottom: var(--space-6); padding-bottom: var(--space-4); border-bottom: 1px solid var(--border-subtle);">
+      <div>
+        <h1 id="meeting-title-display" style="margin-bottom: var(--space-2); word-break: break-word;">Loading Meeting...</h1>
+        <div style="display: flex; gap: var(--space-4); align-items: center; flex-wrap: wrap; font-size: var(--text-sm); color: var(--text-secondary);">
+          <div>
+            <span style="color: var(--text-muted); font-size: var(--text-xs); text-transform: uppercase;">Recorded:</span>
+            <span id="meeting-date-display" style="font-weight: 500; color: var(--text-primary);">-</span>
+          </div>
+          <div>
+            <span style="color: var(--text-muted); font-size: var(--text-xs); text-transform: uppercase;">Duration:</span>
+            <span id="meeting-duration-display" style="font-family: var(--font-mono); font-weight: 500; color: var(--text-primary);">-</span>
+          </div>
+          <div id="meeting-status-display"></div>
+        </div>
+      </div>
+      <div style="display: flex; gap: var(--space-3); align-items: center;">
+        <button id="open-rename-btn" class="btn btn-secondary btn-sm" type="button">Rename Meeting</button>
+        <button id="open-delete-btn" class="btn btn-danger btn-sm" type="button">Delete</button>
+      </div>
+    </div>
+
+    <!-- Audio Player Section -->
+    <div id="audio-players-container"></div>
+
+    <!-- Tabs Navigation -->
+    <nav class="tabs-nav" aria-label="Meeting Sections">
+      <button class="tab-btn active" data-tab="transcript" type="button">Transcript</button>
+      <button class="tab-btn" data-tab="summary" type="button">Summary</button>
+      <button class="tab-btn" data-tab="decisions" type="button">Decisions and Action Items</button>
+    </nav>
+
+    <!-- Tab Panel 1: Transcript Viewer -->
+    <section id="tab-panel-transcript" class="tab-panel active" aria-labelledby="tab-transcript">
+      <div class="toolbar">
+        <div style="display: flex; align-items: center; gap: var(--space-3); flex: 1; flex-wrap: wrap;">
+          <input type="search" id="transcript-search" class="search-input" placeholder="Search transcript dialogue..." aria-label="Search transcript">
+          <span id="search-matches-counter" style="font-size: var(--text-xs); color: var(--text-muted);"></span>
+        </div>
+        <div style="display: flex; gap: var(--space-2);">
+          <button id="copy-transcript-btn" class="btn btn-secondary btn-sm" type="button">Copy Transcript</button>
+          <button id="export-transcript-btn" class="btn btn-secondary btn-sm" type="button">Export Text (.txt)</button>
+        </div>
+      </div>
+
+      <div id="transcript-segments-root">
+        <!-- Rendered by app.js -->
+      </div>
+    </section>
+
+    <!-- Tab Panel 2: Summary -->
+    <section id="tab-panel-summary" class="tab-panel" aria-labelledby="tab-summary">
+      <div class="summary-box" id="summary-content-text">
+        <!-- Rendered by app.js -->
+      </div>
+    </section>
+
+    <!-- Tab Panel 3: Decisions -->
+    <section id="tab-panel-decisions" class="tab-panel" aria-labelledby="tab-decisions">
+      <div id="decisions-root">
+        <!-- Rendered by app.js -->
+      </div>
+    </section>
+  </main>
+
+  <!-- Rename Modal -->
+  <div id="rename-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="rename-modal-title">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3 id="rename-modal-title">Rename Meeting</h3>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label class="form-label" for="rename-title-input">Meeting Title</label>
+          <input type="text" id="rename-title-input" class="form-input" maxlength="255">
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button id="cancel-rename-btn" class="btn btn-secondary" type="button">Cancel</button>
+        <button id="save-rename-btn" class="btn btn-primary" type="button">Save Changes</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Delete Modal -->
+  <div id="delete-modal" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="delete-modal-title">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3 id="delete-modal-title">Delete Meeting</h3>
+      </div>
+      <div class="modal-body">
+        <p style="font-size: var(--text-sm); color: var(--text-secondary); line-height: 1.6;">
+          Are you sure you want to permanently delete this meeting, its audio recordings, and its decisions? This action cannot be undone.
+        </p>
+      </div>
+      <div class="modal-footer">
+        <button id="cancel-delete-btn" class="btn btn-secondary" type="button">Cancel</button>
+        <button id="confirm-delete-btn" class="btn btn-danger" type="button">Delete Permanently</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="/web/app.js"></script>
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      initMeetingPage();
+    });
+  </script>
+</body>
+</html>

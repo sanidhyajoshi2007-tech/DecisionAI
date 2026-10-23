@@ -1,6 +1,4 @@
-"""
-Meeting API routes — handles audio upload, live audio streaming, and meeting viewer.
-"""
+"""Meeting API routes - handles audio upload, live audio streaming, and meeting viewer."""
 
 from fastapi import (
     APIRouter,
@@ -30,15 +28,24 @@ from backend.crud.meetings import (
     delete_meeting,
     get_meeting,
     get_meeting_by_id,
+    get_segments,
     list_meetings,
     update_meeting_audio_path,
+    update_meeting_title,
 )
 from backend.crud.users import create_user, get_user_by_id
 from backend.database import async_session_maker, get_db
 from backend.models.meeting import MeetingStatus
 from backend.models.user import User
 from backend.schemas.decision import DecisionCreate, DecisionListResponse, DecisionResponse
-from backend.schemas.meeting import MeetingCreate, MeetingListResponse, MeetingResponse
+from backend.schemas.meeting import (
+    MeetingCreate,
+    MeetingListResponse,
+    MeetingResponse,
+    MeetingUpdate,
+    TranscriptResponse,
+    TranscriptSegmentResponse,
+)
 from backend.services.audio_streamer import (
     finish_writer,
     get_or_create_writer,
@@ -288,7 +295,7 @@ async def get_meeting_audio_file(
 ):
     """Serve recorded WAV file for a channel (tab or mic), scoped to current_user."""
     meeting = await get_meeting(db, meeting_id=meeting_id, user_id=current_user.id)
-    if not meeting and settings.app_env == "development":
+    if not meeting and settings.app_env == "development" and current_user.id == 1:
         meeting = await get_meeting_by_id(db, meeting_id)
     if not meeting:
         raise HTTPException(
@@ -319,7 +326,7 @@ async def view_meeting_page(
 ):
     """HTML Viewer opened in a new tab when recording completes."""
     meeting = await get_meeting(db, meeting_id=meeting_id, user_id=current_user.id)
-    if not meeting and settings.app_env == "development":
+    if not meeting and settings.app_env == "development" and current_user.id == 1:
         meeting = await get_meeting_by_id(db, meeting_id)
     if not meeting:
         raise HTTPException(
@@ -502,7 +509,7 @@ async def view_meeting_page(
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{title} — DecisionAI</title>
+    <title>{title} - DecisionAI</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
@@ -1304,6 +1311,63 @@ async def get_user_meeting(
     if not meeting:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Meeting not found")
     return MeetingResponse.model_validate(meeting)
+
+
+@router.patch(
+    "/api/meetings/{meeting_id}",
+    response_model=MeetingResponse,
+    summary="Update meeting details (e.g. rename title)",
+    dependencies=[Depends(rate_limit(requests_per_minute=30))],
+)
+async def update_user_meeting(
+    meeting_id: int,
+    payload: MeetingUpdate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+) -> MeetingResponse:
+    meeting = await update_meeting_title(
+        db=db,
+        meeting_id=meeting_id,
+        user_id=current_user.id,
+        title=payload.title.strip(),
+    )
+    if not meeting and settings.app_env == "development" and current_user.id == 1:
+        m = await get_meeting_by_id(db, meeting_id)
+        if m:
+            m.title = payload.title.strip()
+            await db.flush()
+            await db.refresh(m)
+            meeting = m
+    if not meeting:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Meeting not found")
+    return MeetingResponse.model_validate(meeting)
+
+
+@router.get(
+    "/api/meetings/{meeting_id}/transcript",
+    response_model=TranscriptResponse,
+    summary="Get transcript segments for a meeting",
+    dependencies=[Depends(rate_limit(requests_per_minute=60))],
+)
+async def get_meeting_transcript(
+    meeting_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
+) -> TranscriptResponse:
+    meeting = await get_meeting(db, meeting_id=meeting_id, user_id=current_user.id)
+    if not meeting and settings.app_env == "development" and current_user.id == 1:
+        meeting = await get_meeting_by_id(db, meeting_id)
+    if not meeting:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Meeting not found")
+
+    segments = await get_segments(db, meeting_id=meeting_id, user_id=meeting.user_id)
+    return TranscriptResponse(
+        meeting_id=meeting_id,
+        segments=[TranscriptSegmentResponse.model_validate(s) for s in segments],
+        total_segments=len(segments),
+    )
 
 
 @router.delete(

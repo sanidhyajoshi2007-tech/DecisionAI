@@ -1,6 +1,4 @@
-"""
-Authentication API routes — Google OAuth, session cookies, logout, and extension tokens.
-"""
+"""Authentication API routes - Google OAuth, session cookies, logout, and extension tokens."""
 
 from fastapi import APIRouter, Depends, Query, Request, Response, status
 from fastapi.responses import JSONResponse, RedirectResponse

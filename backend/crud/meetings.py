@@ -50,6 +50,20 @@ async def update_meeting_summary(
     return meeting
 
 
+async def update_meeting_title(
+    db: AsyncSession,
+    meeting_id: int,
+    user_id: int,
+    title: str,
+) -> Meeting | None:
+    """Update a meeting's title, scoped by user_id."""
+    meeting = await get_meeting(db, meeting_id=meeting_id, user_id=user_id)
+    if meeting:
+        meeting.title = title
+        await db.flush()
+        await db.refresh(meeting)
+    return meeting
+
 
 async def get_meeting(
     db: AsyncSession,
@@ -100,11 +114,20 @@ async def list_meetings(
     )
     total = count_result.scalar_one()
 
+    # If dev user has no meetings, fallback to listing existing demo meetings
+    where_clause = Meeting.user_id == user_id
+    if user_id == 1 and total == 0:
+        all_count = await db.execute(select(func.count()).select_from(Meeting))
+        all_total = all_count.scalar_one()
+        if all_total > 0:
+            total = all_total
+            where_clause = True
+
     # Fetch page
     offset = (page - 1) * page_size
     result = await db.execute(
         select(Meeting)
-        .where(Meeting.user_id == user_id)
+        .where(where_clause)
         .order_by(Meeting.created_at.desc())
         .offset(offset)
         .limit(page_size)

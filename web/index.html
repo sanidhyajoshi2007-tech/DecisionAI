@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dashboard - DecisionAI</title>
+  <link rel="stylesheet" href="/web/styles.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+</head>
+<body>
+  <!-- Header -->
+  <header class="site-header">
+    <div class="header-container">
+      <a href="/web/index.html" class="brand-link">
+        <div class="brand-mark">DA</div>
+        <span class="brand-title">DecisionAI</span>
+      </a>
+      <div class="nav-actions">
+        <button id="theme-toggle-btn" class="btn-icon" type="button" aria-label="Toggle Theme">
+          <svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor" aria-hidden="true">
+            <circle cx="8" cy="8" r="3"/>
+            <path d="M8 1v2M8 13v2M1 8h2M13 8h2M3 3l1.5 1.5M11.5 11.5L13 13M3 13l1.5-1.5M11.5 4.5L13 3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+          </svg>
+        </button>
+        <div id="user-profile-slot" style="display: flex; align-items: center; gap: var(--space-3);"></div>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Content -->
+  <main class="main-content">
+    <div style="margin-bottom: var(--space-6);">
+      <h1 style="margin-bottom: var(--space-2);">Meeting Intelligence Dashboard</h1>
+      <p>Browse recorded Google Meet conversations, review extracted decisions, and explore multi-speaker transcripts.</p>
+    </div>
+
+    <!-- Bento Grid -->
+    <div class="bento-grid">
+      <!-- Card 1: Recent Meetings Table (Large Card: span 8) -->
+      <section class="bento-card col-span-8" aria-labelledby="heading-recent-meetings">
+        <div class="bento-header">
+          <div>
+            <h2 id="heading-recent-meetings" class="bento-title">Recorded Meetings</h2>
+            <div class="bento-caption">All recorded calls from Google Meet</div>
+          </div>
+          <button onclick="initDashboardPage()" class="btn btn-secondary btn-sm" type="button">Refresh</button>
+        </div>
+        <div id="meetings-table-container">
+          <!-- Populated dynamically by app.js -->
+        </div>
+      </section>
+
+      <!-- Card 2: Summary Stats (Small Card: span 4) -->
+      <section class="bento-card col-span-4" aria-labelledby="heading-stats">
+        <div class="bento-header">
+          <h2 id="heading-stats" class="bento-title">Overview Stats</h2>
+        </div>
+        <div style="display: flex; flex-direction: column; gap: var(--space-6); justify-content: center; flex: 1;">
+          <div>
+            <div class="stat-number" id="stat-total-count">0</div>
+            <div class="stat-desc">Total Meetings Stored</div>
+          </div>
+          <div>
+            <div class="stat-number" id="stat-total-hours">0.0h</div>
+            <div class="stat-desc">Total Audio Duration Captured</div>
+          </div>
+          <div style="border-top: 1px solid var(--border-subtle); padding-top: var(--space-4);">
+            <div style="font-size: var(--text-xs); color: var(--text-muted); text-transform: uppercase; font-weight: 600; margin-bottom: 4px;">Recording Source</div>
+            <div style="font-size: var(--text-sm); color: var(--text-secondary);">Google Meet Chrome Extension via TabCapture API</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Card 3: Recent Decisions (Span 8) -->
+      <section class="bento-card col-span-8" aria-labelledby="heading-decisions">
+        <div class="bento-header">
+          <div>
+            <h2 id="heading-decisions" class="bento-title">Recent Decisions and Action Items</h2>
+            <div class="bento-caption">Extracted structured points from completed meetings</div>
+          </div>
+        </div>
+        <div id="recent-decisions-container">
+          <!-- Populated dynamically by app.js -->
+        </div>
+      </section>
+
+      <!-- Card 4: Ask AI Entry Point (Span 4) -->
+      <section class="bento-card col-span-4" style="background-color: var(--bg-surface-raised);" aria-labelledby="heading-ask-ai">
+        <div class="bento-header">
+          <h2 id="heading-ask-ai" class="bento-title">Ask AI Assistant</h2>
+        </div>
+        <div style="display: flex; flex-direction: column; justify-content: space-between; flex: 1; gap: var(--space-4);">
+          <p style="font-size: var(--text-sm); line-height: 1.6;">
+            Ask questions across your entire meeting archive. Search discussions, verify deadlines, and extract facts with citations.
+          </p>
+          <div style="background-color: var(--bg-surface); border: 1px solid var(--border-subtle); border-radius: var(--radius-md); padding: var(--space-3); font-size: var(--text-xs); color: var(--text-secondary);">
+            Full RAG retrieval chat interface activates in Phase 7.
+          </div>
+          <a href="/web/ask-ai.html" class="btn btn-primary link-arrow" style="align-self: flex-start;">
+            Explore Ask AI
+            <svg class="arrow-icon" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
+              <path d="M3 8h10M9 4l4 4-4 4"/>
+            </svg>
+          </a>
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <script src="/web/app.js"></script>
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      initDashboardPage();
+    });
+  </script>
+</body>
+</html>

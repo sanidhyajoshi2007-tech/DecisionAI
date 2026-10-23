@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Login - DecisionAI</title>
+  <link rel="stylesheet" href="/web/styles.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    .login-wrapper {
+      min-height: calc(100vh - 73px);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: var(--space-6);
+    }
+    .login-card {
+      background-color: var(--bg-surface);
+      border: 1px solid var(--border-subtle);
+      border-radius: var(--radius-xl);
+      padding: var(--space-8);
+      max-width: 440px;
+      width: 100%;
+      text-align: center;
+      box-shadow: none;
+    }
+    .google-btn {
+      width: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: var(--space-3);
+      padding: var(--space-3) var(--space-4);
+      background-color: var(--bg-surface-raised);
+      border: 1px solid var(--border-strong);
+      border-radius: var(--radius-md);
+      color: var(--text-primary);
+      font-size: var(--text-sm);
+      font-weight: 600;
+      cursor: pointer;
+      text-decoration: none;
+      transition: background-color var(--transition-normal), border-color var(--transition-normal);
+      margin-top: var(--space-6);
+    }
+    .google-btn:hover {
+      background-color: var(--bg-surface-hover);
+      border-color: var(--accent-primary);
+      text-decoration: none;
+    }
+    .google-icon-svg {
+      width: 18px;
+      height: 18px;
+    }
+  </style>
+</head>
+<body>
+  <header class="site-header">
+    <div class="header-container">
+      <a href="/web/index.html" class="brand-link">
+        <div class="brand-mark">DA</div>
+        <span class="brand-title">DecisionAI</span>
+      </a>
+      <div class="nav-actions">
+        <button id="theme-toggle-btn" class="btn-icon" type="button" aria-label="Toggle Theme">
+          <svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor" aria-hidden="true">
+            <circle cx="8" cy="8" r="3"/>
+            <path d="M8 1v2M8 13v2M1 8h2M13 8h2M3 3l1.5 1.5M11.5 11.5L13 13M3 13l1.5-1.5M11.5 4.5L13 3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+          </svg>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <main class="login-wrapper">
+    <div class="login-card">
+      <div class="brand-mark" style="width: 44px; height: 44px; margin: 0 auto var(--space-4); font-size: var(--text-base);">DA</div>
+      <h1 style="font-size: var(--text-xl); margin-bottom: var(--space-2);">Sign in to DecisionAI</h1>
+      <p style="font-size: var(--text-sm); color: var(--text-secondary); margin-bottom: var(--space-6);">
+        Access your meeting archive, speech transcripts, and decision log.
+      </p>
+
+      <a href="/auth/google/login" class="google-btn">
+        <svg class="google-icon-svg" viewBox="0 0 24 24" aria-hidden="true">
+          <path fill="#4285F4" d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v4.51h6.6c-.29 1.52-1.14 2.8-2.4 3.65v3.05h3.88c2.27-2.09 3.66-5.17 3.66-9.14z"/>
+          <path fill="#34A853" d="M12 24c3.24 0 5.95-1.08 7.93-2.91l-3.88-3.05c-1.08.72-2.45 1.16-4.05 1.16-3.12 0-5.77-2.1-6.72-4.93H1.25v3.15C3.26 21.36 7.33 24 12 24z"/>
+          <path fill="#FBBC05" d="M5.28 14.27c-.25-.72-.38-1.49-.38-2.27s.14-1.55.38-2.27V6.58H1.25C.45 8.18 0 9.97 0 12s.45 3.82 1.25 5.42l4.03-3.15z"/>
+          <path fill="#EA4335" d="M12 4.75c1.77 0 3.35.61 4.6 1.8l3.42-3.42C17.95 1.19 15.24 0 12 0 7.33 0 3.26 2.64 1.25 6.58l4.03 3.15c.95-2.83 3.6-4.98 6.72-4.98z"/>
+        </svg>
+        Sign in with Google
+      </a>
+
+      <div style="margin-top: var(--space-8); padding-top: var(--space-6); border-top: 1px solid var(--border-subtle); text-align: left; font-size: var(--text-xs); color: var(--text-muted); line-height: 1.6;">
+        <div style="font-weight: 600; color: var(--text-secondary); margin-bottom: 4px;">Security Information</div>
+        Authentication uses Google OAuth 2.0. Successful login stores a signed httpOnly session cookie in your browser. Tokens are strictly scoped to your user account.
+      </div>
+    </div>
+  </main>
+
+  <script src="/web/app.js"></script>
+  <script>
+    document.addEventListener('DOMContentLoaded', async () => {
+      // If user is already authenticated, redirect to dashboard
+      const user = await API.fetchCurrentUser();
+      if (user && user.email) {
+        window.location.href = '/web/index.html';
+      }
+    });
+  </script>
+</body>
+</html>

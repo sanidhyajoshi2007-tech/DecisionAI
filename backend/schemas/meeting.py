@@ -16,6 +16,11 @@ class MeetingCreate(BaseModel):
     title: str = "Untitled Meeting"
 
 
+class MeetingUpdate(BaseModel):
+    """Payload to update meeting details such as title."""
+    title: str
+
+
 class MeetingResponse(BaseModel):
     """Full meeting detail returned by the API."""
     id: int
