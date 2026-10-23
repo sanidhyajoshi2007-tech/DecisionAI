@@ -331,22 +331,20 @@ function getStatusBadge(status) {
 // Dashboard Page Controller
 async function initDashboardPage() {
   const user = await API.fetchCurrentUser();
+  if (!user || !user.email) {
+    window.location.href = '/web/login.html';
+    return;
+  }
+
   const userSlot = document.getElementById('user-profile-slot');
   if (userSlot) {
-    if (user && user.email) {
-      userSlot.innerHTML = `
-        <span style="font-size: var(--text-xs); color: var(--text-secondary);">${escapeHtml(user.name || user.email)}</span>
-        <a href="/web/settings.html" class="btn btn-secondary btn-sm">Settings</a>
-        <a href="/web/privacy.html" class="btn btn-secondary btn-sm">Privacy</a>
-        <button id="logout-btn" class="btn btn-secondary btn-sm" type="button">Logout</button>
-      `;
-      document.getElementById('logout-btn')?.addEventListener('click', API.logout);
-    } else {
-      userSlot.innerHTML = `
-        <a href="/web/privacy.html" class="btn btn-secondary btn-sm">Privacy</a>
-        <a href="/web/login.html" class="btn btn-primary btn-sm">Login</a>
-      `;
-    }
+    userSlot.innerHTML = `
+      <span style="font-size: var(--text-xs); color: var(--text-secondary);">${escapeHtml(user.name || user.email)}</span>
+      <a href="/web/settings.html" class="btn btn-secondary btn-sm">Settings</a>
+      <a href="/web/privacy.html" class="btn btn-secondary btn-sm">Privacy</a>
+      <button id="logout-btn" class="btn btn-secondary btn-sm" type="button">Logout</button>
+    `;
+    document.getElementById('logout-btn')?.addEventListener('click', API.logout);
   }
 
   const tableContainer = document.getElementById('meetings-table-container');
@@ -543,17 +541,18 @@ async function initMeetingPage() {
 
   // Load User in Header
   const user = await API.fetchCurrentUser();
+  if (!user || !user.email) {
+    window.location.href = '/web/login.html';
+    return;
+  }
+
   const userSlot = document.getElementById('user-profile-slot');
   if (userSlot) {
-    if (user && user.email) {
-      userSlot.innerHTML = `
-        <span style="font-size: var(--text-xs); color: var(--text-secondary);">${user.name || user.email}</span>
-        <button id="logout-btn" class="btn btn-secondary btn-sm" type="button">Logout</button>
-      `;
-      document.getElementById('logout-btn')?.addEventListener('click', API.logout);
-    } else {
-      userSlot.innerHTML = `<a href="/web/login.html" class="btn btn-primary btn-sm">Login</a>`;
-    }
+    userSlot.innerHTML = `
+      <span style="font-size: var(--text-xs); color: var(--text-secondary);">${escapeHtml(user.name || user.email)}</span>
+      <button id="logout-btn" class="btn btn-secondary btn-sm" type="button">Logout</button>
+    `;
+    document.getElementById('logout-btn')?.addEventListener('click', API.logout);
   }
 
   // Load Meeting Data
@@ -1002,17 +1001,18 @@ function renderMeetingError(message) {
 // Ask AI Page Controller
 async function initAskAIPage() {
   const user = await API.fetchCurrentUser();
+  if (!user || !user.email) {
+    window.location.href = '/web/login.html';
+    return;
+  }
+
   const userSlot = document.getElementById('user-profile-slot');
   if (userSlot) {
-    if (user && user.email) {
-      userSlot.innerHTML = `
-        <span style="font-size: var(--text-xs); color: var(--text-secondary);">${user.name || user.email}</span>
-        <button id="logout-btn" class="btn btn-secondary btn-sm" type="button">Logout</button>
-      `;
-      document.getElementById('logout-btn')?.addEventListener('click', API.logout);
-    } else {
-      userSlot.innerHTML = `<a href="/web/login.html" class="btn btn-primary btn-sm">Login</a>`;
-    }
+    userSlot.innerHTML = `
+      <span style="font-size: var(--text-xs); color: var(--text-secondary);">${escapeHtml(user.name || user.email)}</span>
+      <button id="logout-btn" class="btn btn-secondary btn-sm" type="button">Logout</button>
+    `;
+    document.getElementById('logout-btn')?.addEventListener('click', API.logout);
   }
 
   // Populate meeting scope dropdown
@@ -1052,6 +1052,30 @@ async function initAskAIPage() {
   }
 
   if (form && input && sendBtn && messagesContainer) {
+    const progressBox = document.getElementById('ai-query-progress');
+    const progressStatus = document.getElementById('ai-progress-status');
+    const progressPercent = document.getElementById('ai-progress-percent');
+    const progressBar = document.getElementById('ai-progress-bar');
+
+    function setAiProgress(pct, statusText) {
+      if (!progressBox) return;
+      progressBox.classList.remove('hidden');
+      if (progressBar) progressBar.style.width = `${pct}%`;
+      if (progressPercent) progressPercent.textContent = `${pct}%`;
+      if (progressStatus) progressStatus.textContent = statusText;
+    }
+
+    function completeAiProgress() {
+      if (!progressBox) return;
+      if (progressBar) progressBar.style.width = '100%';
+      if (progressPercent) progressPercent.textContent = '100%';
+      if (progressStatus) progressStatus.textContent = 'Completed';
+      setTimeout(() => {
+        progressBox.classList.add('hidden');
+        if (progressBar) progressBar.style.width = '0%';
+      }, 400);
+    }
+
     form.addEventListener('submit', async (e) => {
       e.preventDefault();
       const question = input.value.trim();
@@ -1070,7 +1094,12 @@ async function initAskAIPage() {
       input.value = '';
       sendBtn.disabled = true;
 
-      // 2. Append Assistant Placeholder Bubble with Streaming Cursor
+      // 2. Start Progress Bar
+      setAiProgress(20, 'Analyzing question and intent...');
+      const p1 = setTimeout(() => setAiProgress(50, 'Searching meeting transcripts and vector index...'), 350);
+      const p2 = setTimeout(() => setAiProgress(75, 'Retrieving grounded citations...'), 700);
+
+      // 3. Append Assistant Placeholder Bubble with Streaming Cursor
       const assistantBubble = document.createElement('div');
       assistantBubble.className = 'chat-bubble chat-bubble-assistant';
       assistantBubble.innerHTML = `
@@ -1094,6 +1123,9 @@ async function initAskAIPage() {
         question,
         meetingId,
         (token) => {
+          clearTimeout(p1);
+          clearTimeout(p2);
+          setAiProgress(90, 'Synthesizing grounded response...');
           accumulatedText += token;
           contentEl.innerHTML = `${escapeHtml(accumulatedText)}<span class="streaming-cursor"></span>`;
           messagesContainer.scrollTop = messagesContainer.scrollHeight;
@@ -1120,11 +1152,17 @@ async function initAskAIPage() {
           messagesContainer.scrollTop = messagesContainer.scrollHeight;
         },
         () => {
+          clearTimeout(p1);
+          clearTimeout(p2);
+          completeAiProgress();
           contentEl.innerHTML = escapeHtml(accumulatedText);
           sendBtn.disabled = false;
           input.focus();
         },
         (err) => {
+          clearTimeout(p1);
+          clearTimeout(p2);
+          if (progressBox) progressBox.classList.add('hidden');
           contentEl.innerHTML = `<span style="color: var(--accent-complement);">Error: ${escapeHtml(err.message)}</span>`;
           sendBtn.disabled = false;
         }
@@ -1157,21 +1195,19 @@ function escapeHtml(str) {
 async function initSettingsPage() {
   initTheme();
   const user = await API.fetchCurrentUser();
+  if (!user || !user.email) {
+    window.location.href = '/web/login.html';
+    return;
+  }
+
   const userSlot = document.getElementById('user-profile-slot');
   if (userSlot) {
-    if (user && user.email) {
-      userSlot.innerHTML = `
-        <span style="font-size: var(--text-xs); color: var(--text-secondary);">${escapeHtml(user.name || user.email)}</span>
-        <a href="/web/privacy.html" class="btn btn-secondary btn-sm">Privacy</a>
-        <button id="logout-btn" class="btn btn-secondary btn-sm" type="button">Logout</button>
-      `;
-      document.getElementById('logout-btn')?.addEventListener('click', API.logout);
-    } else {
-      userSlot.innerHTML = `
-        <a href="/web/privacy.html" class="btn btn-secondary btn-sm">Privacy</a>
-        <a href="/web/login.html" class="btn btn-primary btn-sm">Login</a>
-      `;
-    }
+    userSlot.innerHTML = `
+      <span style="font-size: var(--text-xs); color: var(--text-secondary);">${escapeHtml(user.name || user.email)}</span>
+      <a href="/web/privacy.html" class="btn btn-secondary btn-sm">Privacy</a>
+      <button id="logout-btn" class="btn btn-secondary btn-sm" type="button">Logout</button>
+    `;
+    document.getElementById('logout-btn')?.addEventListener('click', API.logout);
   }
 
   // Load Retention Settings

@@ -29,76 +29,110 @@
             </div>
         </header>
 
-        <!-- Google Meet Tab Warning / Notice -->
-        <div id="tabNotice" class="notice-card warning">
-            <div class="notice-icon">
-                <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
-                    <path d="M8 1a7 7 0 1 0 0 14A7 7 0 0 0 8 1zm0 3a.75.75 0 0 1 .75.75v3.5a.75.75 0 0 1-1.5 0v-3.5A.75.75 0 0 1 8 4zm0 8a1 1 0 1 1 0-2 1 1 0 0 1 0 2z"/>
+        <!-- User Account Bar (Shown when authenticated) -->
+        <div id="accountCard" class="account-card hidden">
+            <span id="accountEmail" class="account-email">user@example.com</span>
+            <span class="account-badge">Signed In</span>
+        </div>
+
+        <!-- Login Required Card (Shown when not authenticated) -->
+        <div id="loginGateCard" class="login-gate-card">
+            <div class="login-gate-title">Sign In Required</div>
+            <p class="login-gate-desc">Please log in to your personal DecisionAI account before recording to store meeting audios and transcripts.</p>
+            <button id="openLoginBtn" class="btn-login" type="button">
+                <span>Sign In to DecisionAI</span>
+                <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
+                    <path d="M3 8h10M9 4l4 4-4 4"/>
                 </svg>
-            </div>
-            <div class="notice-content">
-                <p id="noticeText">Navigate to a <strong>meet.google.com</strong> tab to start recording.</p>
-            </div>
+            </button>
         </div>
 
-        <!-- Recording Timer & Info (Visible when recording) -->
-        <div id="recordingDetails" class="recording-details hidden">
-            <div class="timer-box">
-                <span class="timer-label">Recording Duration</span>
-                <span id="recordingTimer" class="timer-digits">00:00</span>
+        <!-- Transcription Progress Card (Shown when processing transcripts) -->
+        <div id="transcriptionCard" class="transcription-card hidden">
+            <div class="transcription-header">
+                <span class="transcription-title">AI Transcript Generation</span>
+                <span id="transcriptionPercent" class="transcription-percent">20%</span>
             </div>
-            <div class="active-meeting-info">
-                <span>Meeting ID: <strong id="activeMeetingId">#-</strong></span>
-                <span class="channels-tag">2 Ch (Tab + Mic)</span>
+            <div class="transcription-track">
+                <div id="transcriptionBar" class="transcription-bar" style="width: 20%;"></div>
             </div>
+            <div id="transcriptionStatus" class="transcription-status">Transcribing audio channels...</div>
+            <div class="transcription-note">Redirecting to your dashboard as soon as processing finishes.</div>
         </div>
 
-        <!-- Meeting Title Input (Shown before recording) -->
-        <div id="inputSection" class="input-section">
-            <label for="meetingTitle">Meeting Title</label>
-            <input type="text" id="meetingTitle" placeholder="e.g. Sprint Planning, Client Review" value="Google Meet Call">
-        </div>
-
-        <!-- Microphone Status Indicator -->
-        <div id="micStatusCard" class="mic-status-card">
-            <div class="mic-status-left">
-                <span id="micStatusIcon" class="mic-status-icon">
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-                        <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/>
-                        <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
-                        <line x1="12" x2="12" y1="19" y2="22"/>
+        <!-- Recording Controls (Enabled only when authenticated) -->
+        <div id="recordingControls" class="hidden" style="display: flex; flex-direction: column; gap: 14px;">
+            <!-- Google Meet Tab Warning / Notice -->
+            <div id="tabNotice" class="notice-card warning">
+                <div class="notice-icon">
+                    <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+                        <path d="M8 1a7 7 0 1 0 0 14A7 7 0 0 0 8 1zm0 3a.75.75 0 0 1 .75.75v3.5a.75.75 0 0 1-1.5 0v-3.5A.75.75 0 0 1 8 4zm0 8a1 1 0 1 1 0-2 1 1 0 0 1 0 2z"/>
                     </svg>
-                </span>
-                <div class="mic-status-info">
-                    <span class="mic-status-title">Your Voice (Microphone)</span>
-                    <span id="micStatusText" class="mic-status-text">Checking permission...</span>
+                </div>
+                <div class="notice-content">
+                    <p id="noticeText">Navigate to a <strong>meet.google.com</strong> tab to start recording.</p>
                 </div>
             </div>
-            <button id="enableMicBtn" class="btn-mic-action hidden" type="button">Enable</button>
-        </div>
 
-        <!-- Recording Consent Notice -->
-        <div id="consentSection" class="consent-section" style="margin-top: 12px; margin-bottom: 12px; padding: 10px 12px; background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 8px;">
-            <label style="display: flex; align-items: flex-start; gap: 8px; font-size: 11px; cursor: pointer; color: #cbd5e1; line-height: 1.4;">
-                <input type="checkbox" id="consentCheckbox" style="margin-top: 2px;">
-                <span>I confirm that all call participants have been notified and consented to recording this meeting.</span>
-            </label>
-        </div>
+            <!-- Recording Timer & Info (Visible when recording) -->
+            <div id="recordingDetails" class="recording-details hidden">
+                <div class="timer-box">
+                    <span class="timer-label">Recording Duration</span>
+                    <span id="recordingTimer" class="timer-digits">00:00</span>
+                </div>
+                <div class="active-meeting-info">
+                    <span>Meeting ID: <strong id="activeMeetingId">#-</strong></span>
+                    <span class="channels-tag">2 Ch (Tab + Mic)</span>
+                </div>
+            </div>
 
-        <!-- Action Controls -->
-        <div class="button-group">
-            <button id="startBtn" class="btn btn-primary" disabled>
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-                    <circle cx="12" cy="12" r="9"/>
-                </svg>
-                <span>Start Recording</span>
-            </button>
-            <button id="stopBtn" class="btn btn-danger hidden">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-                    <rect x="6" y="6" width="12" height="12" rx="2"/>
-                </svg>
-                <span>Stop Recording</span>
-            </button>
+            <!-- Meeting Title Input (Shown before recording) -->
+            <div id="inputSection" class="input-section">
+                <label for="meetingTitle">Meeting Title</label>
+                <input type="text" id="meetingTitle" placeholder="e.g. Sprint Planning, Client Review" value="Google Meet Call">
+            </div>
+
+            <!-- Microphone Status Indicator -->
+            <div id="micStatusCard" class="mic-status-card">
+                <div class="mic-status-left">
+                    <span id="micStatusIcon" class="mic-status-icon">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                            <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/>
+                            <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+                            <line x1="12" x2="12" y1="19" y2="22"/>
+                        </svg>
+                    </span>
+                    <div class="mic-status-info">
+                        <span class="mic-status-title">Your Voice (Microphone)</span>
+                        <span id="micStatusText" class="mic-status-text">Checking permission...</span>
+                    </div>
+                </div>
+                <button id="enableMicBtn" class="btn-mic-action hidden" type="button">Enable</button>
+            </div>
+
+            <!-- Recording Consent Notice -->
+            <div id="consentSection" class="consent-section" style="padding: 10px 12px; background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 8px;">
+                <label style="display: flex; align-items: flex-start; gap: 8px; font-size: 11px; cursor: pointer; color: #cbd5e1; line-height: 1.4;">
+                    <input type="checkbox" id="consentCheckbox" style="margin-top: 2px;">
+                    <span>I confirm that all call participants have been notified and consented to recording this meeting.</span>
+                </label>
+            </div>
+
+            <!-- Action Controls -->
+            <div class="button-group">
+                <button id="startBtn" class="btn btn-primary" disabled>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                        <circle cx="12" cy="12" r="9"/>
+                    </svg>
+                    <span>Start Recording</span>
+                </button>
+                <button id="stopBtn" class="btn btn-danger hidden">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                        <rect x="6" y="6" width="12" height="12" rx="2"/>
+                    </svg>
+                    <span>Stop Recording</span>
+                </button>
+            </div>
         </div>
 
         <!-- Status & Feedback -->

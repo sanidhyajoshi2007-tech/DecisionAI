@@ -53,20 +53,28 @@ async function handleStartRecording(tabId, title, hasMicPermission, consentRecor
   await chrome.storage.session.set({ recordingState: "starting" });
 
   try {
-    // 1. Create meeting in backend
-    let createRes;
+    // 1. Verify personal account authentication
+    let authRes;
     try {
-      createRes = await fetch(`${BACKEND_BASE}/meetings`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          title: title || "Google Meet Call",
-          consent_recorded: Boolean(consentRecorded),
-        }),
-      });
+      authRes = await fetch(`${BACKEND_BASE}/auth/me`, { credentials: "include" });
     } catch (netErr) {
       throw new Error(`Cannot reach backend at ${BACKEND_BASE}. Make sure the FastAPI server is running.`);
     }
+
+    if (!authRes.ok) {
+      throw new Error("Please sign in to your DecisionAI account before recording.");
+    }
+
+    // 2. Create meeting in backend scoped to authenticated user
+    const createRes = await fetch(`${BACKEND_BASE}/meetings`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify({
+        title: title || "Google Meet Call",
+        consent_recorded: Boolean(consentRecorded),
+      }),
+    });
 
     if (!createRes.ok) {
       throw new Error(`Backend returned status ${createRes.status}`);
@@ -75,10 +83,10 @@ async function handleStartRecording(tabId, title, hasMicPermission, consentRecor
     const meetingData = await createRes.json();
     const meetingId = meetingData.id;
 
-    // 2. Get stream ID for the target Google Meet tab
+    // 3. Get stream ID for the target Google Meet tab
     const streamId = await chrome.tabCapture.getMediaStreamId({ targetTabId: tabId });
 
-    // 3. Ensure offscreen document exists
+    // 4. Ensure offscreen document exists
     const hasDoc = await chrome.offscreen.hasDocument();
     if (!hasDoc) {
       await chrome.offscreen.createDocument({
@@ -88,7 +96,7 @@ async function handleStartRecording(tabId, title, hasMicPermission, consentRecor
       });
     }
 
-    // 4. Instruct offscreen document to begin capture and WebSocket streaming
+    // 5. Instruct offscreen document to begin capture and WebSocket streaming
     const captureRes = await chrome.runtime.sendMessage({
       type: "START_OFFSCREEN_CAPTURE",
       streamId,
@@ -100,7 +108,7 @@ async function handleStartRecording(tabId, title, hasMicPermission, consentRecor
       throw new Error(captureRes?.error || "Offscreen audio capture failed to start");
     }
 
-    // 5. Update state and set visual REC badge
+    // 6. Update state and set visual REC badge
     await chrome.storage.session.set({
       recordingState: "recording",
       isRecording: true,
@@ -147,7 +155,36 @@ async function handleRecordingFinished(meetingId) {
     await chrome.offscreen.closeDocument();
   }
 
-  // 2. Reset session state
+  // 2. Set transcribing status on extension badge and storage
+  await chrome.storage.session.set({
+    recordingState: "transcribing",
+    isRecording: false,
+    meetingId,
+  });
+  await chrome.action.setBadgeText({ text: "AI" });
+  await chrome.action.setBadgeBackgroundColor({ color: "#4F78E3" });
+
+  // 3. Poll meeting status until AI transcription and post-processing finish
+  if (meetingId) {
+    for (let i = 0; i < 60; i++) {
+      try {
+        const checkRes = await fetch(`${BACKEND_BASE}/api/meetings/${meetingId}`, {
+          credentials: "include",
+        });
+        if (checkRes.ok) {
+          const m = await checkRes.json();
+          if (m.status === "ready" || m.status === "failed" || m.status === "error") {
+            break;
+          }
+        }
+      } catch {
+        // Retry next interval
+      }
+      await new Promise((r) => setTimeout(r, 1500));
+    }
+  }
+
+  // 4. Reset session state
   await chrome.storage.session.set({
     recordingState: "idle",
     isRecording: false,
@@ -155,11 +192,9 @@ async function handleRecordingFinished(meetingId) {
     startTime: null,
   });
 
-  // 3. Clear action badge
+  // 5. Clear action badge
   await chrome.action.setBadgeText({ text: "" });
 
-  // 4. Open meeting viewer page in a new tab
-  if (meetingId) {
-    await chrome.tabs.create({ url: `${BACKEND_BASE}/meetings/${meetingId}` });
-  }
+  // 6. Redirect user directly to the DecisionAI Dashboard
+  await chrome.tabs.create({ url: `${BACKEND_BASE}/web/index.html` });
 }

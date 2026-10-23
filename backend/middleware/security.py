@@ -21,6 +21,7 @@ CSRF_HEADER_NAME = "x-csrf-token"
 EXEMPT_PATHS = {
     "/auth/google/login",
     "/auth/google/callback",
+    "/auth/login",
     "/auth/mock-login",
     "/auth/logout",
     "/auth/extension-token",

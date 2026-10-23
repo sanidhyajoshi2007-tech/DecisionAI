@@ -1,5 +1,5 @@
 /**
- * permission.js — Handles microphone permission grant in a persistent extension tab.
+ * permission.js: Handles microphone permission grant in a persistent extension tab.
  */
 
 document.addEventListener("DOMContentLoaded", async () => {
@@ -11,7 +11,7 @@ document.addEventListener("DOMContentLoaded", async () => {
       if (navigator.permissions && navigator.permissions.query) {
         const perm = await navigator.permissions.query({ name: "microphone" });
         if (perm.state === "granted") {
-          showSuccess("Microphone permission is already granted! Closing tab...");
+          showSuccess("Microphone permission is already granted. Closing tab...");
           setTimeout(() => window.close(), 1200);
           return true;
         }
@@ -31,10 +31,10 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      // Stop tracks immediately — permission is now stored for the extension origin
+      // Stop tracks immediately - permission is now stored for the extension origin
       stream.getTracks().forEach((track) => track.stop());
 
-      showSuccess("✅ Microphone permission granted! You can now record meetings.");
+      showSuccess("Microphone permission granted. You can now record meetings.");
       requestBtn.innerHTML = "<span>Microphone Enabled</span>";
       setTimeout(() => window.close(), 1500);
     } catch (err) {

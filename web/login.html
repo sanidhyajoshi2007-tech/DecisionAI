@@ -91,9 +91,29 @@
         Sign in with Google
       </a>
 
+      <div style="display: flex; align-items: center; gap: var(--space-3); margin: var(--space-6) 0;">
+        <div style="flex: 1; height: 1px; background-color: var(--border-subtle);"></div>
+        <span style="font-size: var(--text-xs); color: var(--text-muted); text-transform: uppercase; font-weight: 600;">or email</span>
+        <div style="flex: 1; height: 1px; background-color: var(--border-subtle);"></div>
+      </div>
+
+      <form id="personal-login-form" style="text-align: left; display: flex; flex-direction: column; gap: var(--space-3);">
+        <div>
+          <label for="login-email" class="form-label" style="font-size: var(--text-xs); color: var(--text-secondary); margin-bottom: var(--space-1); display: block;">Email Address</label>
+          <input type="email" id="login-email" class="form-input" placeholder="you@example.com" required autocomplete="email" style="width: 100%;">
+        </div>
+        <div>
+          <label for="login-name" class="form-label" style="font-size: var(--text-xs); color: var(--text-secondary); margin-bottom: var(--space-1); display: block;">Your Name (Optional)</label>
+          <input type="text" id="login-name" class="form-input" placeholder="e.g. Sanidhya" autocomplete="name" style="width: 100%;">
+        </div>
+        <button type="submit" id="login-submit-btn" class="btn btn-primary" style="width: 100%; margin-top: var(--space-2);">
+          Continue to Dashboard
+        </button>
+      </form>
+
       <div style="margin-top: var(--space-8); padding-top: var(--space-6); border-top: 1px solid var(--border-subtle); text-align: left; font-size: var(--text-xs); color: var(--text-muted); line-height: 1.6;">
-        <div style="font-weight: 600; color: var(--text-secondary); margin-bottom: 4px;">Security Information</div>
-        Authentication uses Google OAuth 2.0. Successful login stores a signed httpOnly session cookie in your browser. Tokens are strictly scoped to your user account.
+        <div style="font-weight: 600; color: var(--text-secondary); margin-bottom: 4px;">Personal Account Protection</div>
+        Every user's recordings, speech transcripts, and decision log are strictly isolated to their own user profile. All session cookies are httpOnly and scoped.
       </div>
     </div>
   </main>
@@ -105,7 +125,42 @@
       const user = await API.fetchCurrentUser();
       if (user && user.email) {
         window.location.href = '/web/index.html';
+        return;
       }
+
+      const form = document.getElementById('personal-login-form');
+      const emailInput = document.getElementById('login-email');
+      const nameInput = document.getElementById('login-name');
+      const submitBtn = document.getElementById('login-submit-btn');
+
+      form?.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const email = emailInput.value.trim();
+        const name = nameInput.value.trim();
+        if (!email) return;
+
+        submitBtn.disabled = true;
+        submitBtn.textContent = 'Signing in...';
+
+        try {
+          const res = await fetch('/auth/login', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email, name: name || null }),
+          });
+
+          if (!res.ok) {
+            const err = await res.json().catch(() => ({}));
+            throw new Error(err.detail || 'Sign-in failed');
+          }
+
+          window.location.href = '/web/index.html';
+        } catch (err) {
+          alert('Sign-in error: ' + err.message);
+          submitBtn.disabled = false;
+          submitBtn.textContent = 'Continue to Dashboard';
+        }
+      });
     });
   </script>
 </body>

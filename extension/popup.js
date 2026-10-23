@@ -1,18 +1,18 @@
 /**
  * popup.js: DecisionAI Extension Popup Controller
  *
- * Controls recording lifecycle from the popup UI:
+ * Controls personal user authentication and recording lifecycle:
+ * - Checks personal authentication with backend (/auth/me) before permitting recording
  * - Checks if the active browser tab is on meet.google.com
  * - Enables/disables Start Recording button accordingly
  * - Displays live timer and visible recording indicator
- * - Dispatches START_RECORDING and STOP_RECORDING messages to service-worker.js
+ * - Displays AI transcription progress bar when call finishes and redirects to dashboard
  */
 
 document.addEventListener("DOMContentLoaded", async () => {
   const startBtn = document.getElementById("startBtn");
   const stopBtn = document.getElementById("stopBtn");
   const tabNotice = document.getElementById("tabNotice");
-  const noticeText = document.getElementById("noticeText");
   const recordingBadge = document.getElementById("recordingBadge");
   const recordingDetails = document.getElementById("recordingDetails");
   const recordingTimer = document.getElementById("recordingTimer");
@@ -26,9 +26,62 @@ document.addEventListener("DOMContentLoaded", async () => {
   const consentSection = document.getElementById("consentSection");
   const consentCheckbox = document.getElementById("consentCheckbox");
 
-  let timerInterval = null;
+  // Auth & Progress DOM elements
+  const accountCard = document.getElementById("accountCard");
+  const accountEmail = document.getElementById("accountEmail");
+  const loginGateCard = document.getElementById("loginGateCard");
+  const openLoginBtn = document.getElementById("openLoginBtn");
+  const recordingControls = document.getElementById("recordingControls");
+  const transcriptionCard = document.getElementById("transcriptionCard");
+  const transcriptionPercent = document.getElementById("transcriptionPercent");
+  const transcriptionBar = document.getElementById("transcriptionBar");
+  const transcriptionStatus = document.getElementById("transcriptionStatus");
 
-  // Check and observe microphone permission status
+  let timerInterval = null;
+  let currentActiveMeetingId = null;
+
+  // 1. Check Authentication with Backend
+  async function checkAuth() {
+    try {
+      const res = await fetch("http://localhost:8000/auth/me", {
+        credentials: "include",
+      });
+      if (res.ok) {
+        return await res.json();
+      }
+      return null;
+    } catch {
+      return null;
+    }
+  }
+
+  if (openLoginBtn) {
+    openLoginBtn.addEventListener("click", () => {
+      chrome.tabs.create({ url: "http://localhost:8000/web/login.html" });
+    });
+  }
+
+  const currentUser = await checkAuth();
+
+  if (!currentUser || !currentUser.email) {
+    // Show login gate, lock recording
+    if (loginGateCard) loginGateCard.classList.remove("hidden");
+    if (accountCard) accountCard.classList.add("hidden");
+    if (recordingControls) recordingControls.classList.add("hidden");
+    if (transcriptionCard) transcriptionCard.classList.add("hidden");
+    setStatus("Please sign in to your DecisionAI account to record meetings.", false);
+    return;
+  }
+
+  // User is authenticated
+  if (loginGateCard) loginGateCard.classList.add("hidden");
+  if (accountCard) {
+    accountCard.classList.remove("hidden");
+    if (accountEmail) accountEmail.textContent = currentUser.email;
+  }
+  if (recordingControls) recordingControls.classList.remove("hidden");
+
+  // 2. Microphone Permission Check
   async function checkMicPermission() {
     try {
       if (navigator.permissions && navigator.permissions.query) {
@@ -67,13 +120,13 @@ document.addEventListener("DOMContentLoaded", async () => {
 
   await checkMicPermission();
 
-  // 1. Check current active tab
+  // 3. Check Current Active Tab
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   const isMeetTab = Boolean(
     tab && tab.url && tab.url.startsWith("https://meet.google.com/")
   );
 
-  // 2. Fetch current recording state from session storage
+  // 4. Fetch Current Session State
   const sessionData = await chrome.storage.session.get([
     "isRecording",
     "meetingId",
@@ -82,28 +135,35 @@ document.addEventListener("DOMContentLoaded", async () => {
   ]);
 
   const isRecording = Boolean(sessionData.isRecording);
-  const meetingId = sessionData.meetingId;
+  currentActiveMeetingId = sessionData.meetingId;
   const startTime = sessionData.startTime || Date.now();
+  const recordingState = sessionData.recordingState || "idle";
 
-  updateUI(isRecording, isMeetTab, meetingId, startTime);
+  if (recordingState === "transcribing" && currentActiveMeetingId) {
+    showTranscriptionUI(currentActiveMeetingId);
+  } else {
+    updateUI(isRecording, isMeetTab, currentActiveMeetingId, startTime);
+  }
 
-  // 3. Listen for storage changes (e.g. if recording stops from background)
+  // 5. Listen for Storage Changes
   chrome.storage.onChanged.addListener((changes, area) => {
     if (area === "session") {
-      const isRec = changes.isRecording
-        ? changes.isRecording.newValue
-        : isRecording;
-      const mId = changes.meetingId
-        ? changes.meetingId.newValue
-        : meetingId;
-      const sTime = changes.startTime
-        ? changes.startTime.newValue
-        : startTime;
-      updateUI(isRec, isMeetTab, mId, sTime);
+      const state = changes.recordingState ? changes.recordingState.newValue : recordingState;
+      const mId = changes.meetingId ? changes.meetingId.newValue : currentActiveMeetingId;
+      const isRec = changes.isRecording ? changes.isRecording.newValue : isRecording;
+      const sTime = changes.startTime ? changes.startTime.newValue : startTime;
+
+      if (state === "transcribing" && mId) {
+        showTranscriptionUI(mId);
+      } else {
+        if (transcriptionCard) transcriptionCard.classList.add("hidden");
+        if (recordingControls) recordingControls.classList.remove("hidden");
+        updateUI(isRec, isMeetTab, mId, sTime);
+      }
     }
   });
 
-  // Consent checkbox listener
+  // Consent Checkbox
   if (consentCheckbox) {
     consentCheckbox.addEventListener("change", () => {
       if (isMeetTab && !isRecording) {
@@ -112,7 +172,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     });
   }
 
-  // 4. Start Recording Button
+  // 6. Start Recording Action
   startBtn.addEventListener("click", async () => {
     if (!isMeetTab) return;
 
@@ -121,10 +181,8 @@ document.addEventListener("DOMContentLoaded", async () => {
       return;
     }
 
-    // Verify microphone permission first
     const isMicGranted = await checkMicPermission();
     if (!isMicGranted) {
-      // Open permission tab so the user can click Allow without popup auto-closing
       chrome.tabs.create({ url: chrome.runtime.getURL("permission.html") });
       setStatus("Please click 'Allow' on the microphone tab that just opened.", true);
       return;
@@ -147,6 +205,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         throw new Error(response?.error || "Failed to start recording");
       }
 
+      currentActiveMeetingId = response.meetingId;
       setStatus("", false);
       updateUI(true, isMeetTab, response.meetingId, Date.now());
     } catch (err) {
@@ -162,11 +221,13 @@ document.addEventListener("DOMContentLoaded", async () => {
     }
   });
 
-  // 5. Stop Recording Button
+  // 7. Stop Recording Action
   stopBtn.addEventListener("click", async () => {
     stopBtn.disabled = true;
-    stopBtn.innerHTML = "<span>Finalizing...</span>";
-    setStatus("Saving audio and opening summary...", false);
+    stopBtn.innerHTML = "<span>Stopping...</span>";
+
+    const mId = currentActiveMeetingId;
+    showTranscriptionUI(mId);
 
     try {
       const response = await chrome.runtime.sendMessage({
@@ -176,25 +237,85 @@ document.addEventListener("DOMContentLoaded", async () => {
       if (!response || !response.success) {
         throw new Error(response?.error || "Failed to stop recording");
       }
-      // UI will automatically update via session storage reset or window closing
     } catch (err) {
       console.error("Stop recording error:", err);
       setStatus(err.message, true);
-      stopBtn.disabled = false;
-      stopBtn.innerHTML = `
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-            <rect x="6" y="6" width="12" height="12" rx="2"/>
-        </svg>
-        <span>Stop Recording</span>
-      `;
     }
   });
+
+  // Transcription Progress Controller
+  function showTranscriptionUI(mId) {
+    clearInterval(timerInterval);
+    if (recordingControls) recordingControls.classList.add("hidden");
+    if (transcriptionCard) transcriptionCard.classList.remove("hidden");
+    if (recordingBadge) recordingBadge.classList.add("hidden");
+
+    let progress = 20;
+    if (transcriptionBar) transcriptionBar.style.width = "20%";
+    if (transcriptionPercent) transcriptionPercent.textContent = "20%";
+    if (transcriptionStatus) transcriptionStatus.textContent = "Saving audio tracks and initializing AI pipeline...";
+
+    const progressTimer = setInterval(() => {
+      if (progress < 85) {
+        progress += 6;
+        if (transcriptionBar) transcriptionBar.style.width = `${progress}%`;
+        if (transcriptionPercent) transcriptionPercent.textContent = `${progress}%`;
+
+        if (progress > 30 && progress <= 55) {
+          if (transcriptionStatus) transcriptionStatus.textContent = "AI is transcribing Hindi and English channels...";
+        } else if (progress > 55 && progress <= 75) {
+          if (transcriptionStatus) transcriptionStatus.textContent = "Extracting key decisions and action items...";
+        } else if (progress > 75) {
+          if (transcriptionStatus) transcriptionStatus.textContent = "Indexing transcript into hybrid vector search...";
+        }
+      }
+    }, 1200);
+
+    const pollInterval = setInterval(async () => {
+      if (!mId) return;
+      try {
+        const res = await fetch(`http://localhost:8000/api/meetings/${mId}`, {
+          credentials: "include",
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (data.status === "ready") {
+            clearInterval(progressTimer);
+            clearInterval(pollInterval);
+            if (transcriptionBar) transcriptionBar.style.width = "100%";
+            if (transcriptionPercent) transcriptionPercent.textContent = "100%";
+            if (transcriptionStatus) transcriptionStatus.textContent = "Transcription complete! Redirecting to Dashboard...";
+
+            await chrome.storage.session.set({
+              recordingState: "idle",
+              isRecording: false,
+              meetingId: null,
+              startTime: null,
+            });
+
+            setTimeout(() => {
+              chrome.tabs.create({ url: "http://localhost:8000/web/index.html" });
+              window.close();
+            }, 600);
+          } else if (data.status === "failed" || data.status === "error") {
+            clearInterval(progressTimer);
+            clearInterval(pollInterval);
+            if (transcriptionBar) transcriptionBar.style.width = "100%";
+            if (transcriptionPercent) transcriptionPercent.textContent = "Error";
+            if (transcriptionStatus) transcriptionStatus.textContent = data.error_message || "Processing failed.";
+          }
+        }
+      } catch (err) {
+        console.warn("Status poll error:", err);
+      }
+    }, 1500);
+  }
 
   function updateUI(recording, onMeet, mId, sTime) {
     clearInterval(timerInterval);
 
     if (recording) {
-      // Recording Active State
+      // Active Recording State
       tabNotice.classList.add("hidden");
       inputSection.classList.add("hidden");
       micStatusCard.classList.add("hidden");
@@ -213,7 +334,6 @@ document.addEventListener("DOMContentLoaded", async () => {
       recordingDetails.classList.remove("hidden");
       activeMeetingId.textContent = mId ? `#${mId}` : "Active";
 
-      // Live timer counter
       const updateTimer = () => {
         const elapsedSeconds = Math.max(0, Math.floor((Date.now() - sTime) / 1000));
         const minutes = String(Math.floor(elapsedSeconds / 60)).padStart(2, "0");
@@ -233,7 +353,6 @@ document.addEventListener("DOMContentLoaded", async () => {
       if (consentSection) consentSection.classList.remove("hidden");
 
       if (onMeet) {
-        // Active on Google Meet
         tabNotice.classList.remove("warning");
         tabNotice.classList.add("success");
         tabNotice.classList.remove("hidden");
@@ -256,7 +375,6 @@ document.addEventListener("DOMContentLoaded", async () => {
           <span>Start Recording</span>
         `;
       } else {
-        // Not on Google Meet
         tabNotice.classList.remove("success");
         tabNotice.classList.add("warning");
         tabNotice.classList.remove("hidden");

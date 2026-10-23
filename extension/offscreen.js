@@ -1,5 +1,5 @@
 /**
- * offscreen.js — Captures tab audio and microphone audio in the offscreen document.
+ * offscreen.js: Captures tab audio and microphone audio in the offscreen document.
  *
  * Runs AudioWorklets for both audio streams at 16 kHz mono 16-bit PCM.
  * Streams 1-second chunks over WebSocket to ws://localhost:8000/ws/meetings/{meeting_id}.
@@ -114,27 +114,13 @@ async function startCapture(streamId, meetingId, hasMicPermission) {
   silentSink.gain.value = 0;
   silentSink.connect(audioCtx.destination);
 
-  // 4. Create separate AudioWorkletNodes for tab and mic with clean voice pre-filters
+  // 4. Create separate AudioWorkletNodes for tab and mic (clean raw capture)
   tabWorklet = new AudioWorkletNode(audioCtx, "pcm-recorder-processor", {
     processorOptions: { channel: "tab" },
   });
   tabWorklet.port.onmessage = (e) => handlePCMChunk(e.data);
 
-  // Tab Audio Voice Pre-Filter: 85 Hz rumble cut + 3.4 kHz consonant clarity boost
-  const tabHighpass = audioCtx.createBiquadFilter();
-  tabHighpass.type = "highpass";
-  tabHighpass.frequency.value = 85;
-  tabHighpass.Q.value = 0.707;
-
-  const tabPresence = audioCtx.createBiquadFilter();
-  tabPresence.type = "peaking";
-  tabPresence.frequency.value = 3400;
-  tabPresence.Q.value = 1.0;
-  tabPresence.gain.value = 3.0;
-
-  tabSource.connect(tabHighpass);
-  tabHighpass.connect(tabPresence);
-  tabPresence.connect(tabWorklet);
+  tabSource.connect(tabWorklet);
   tabWorklet.connect(silentSink);
 
   if (micStream) {
@@ -143,31 +129,10 @@ async function startCapture(streamId, meetingId, hasMicPermission) {
     });
     micWorklet.port.onmessage = (e) => handlePCMChunk(e.data);
 
-    // Mic Audio Voice Pre-Filter: 100 Hz rumble cut + 380 Hz mud reduction + 3.4 kHz consonant clarity boost
-    const micHighpass = audioCtx.createBiquadFilter();
-    micHighpass.type = "highpass";
-    micHighpass.frequency.value = 100;
-    micHighpass.Q.value = 0.707;
-
-    const micMudCut = audioCtx.createBiquadFilter();
-    micMudCut.type = "peaking";
-    micMudCut.frequency.value = 380;
-    micMudCut.Q.value = 1.0;
-    micMudCut.gain.value = -3.0;
-
-    const micPresence = audioCtx.createBiquadFilter();
-    micPresence.type = "peaking";
-    micPresence.frequency.value = 3400;
-    micPresence.Q.value = 1.0;
-    micPresence.gain.value = 4.0;
-
     const micSource = audioCtx.createMediaStreamSource(micStream);
-    micSource.connect(micHighpass);
-    micHighpass.connect(micMudCut);
-    micMudCut.connect(micPresence);
-    micPresence.connect(micWorklet);
+    micSource.connect(micWorklet);
     micWorklet.connect(silentSink);
-    console.log("Microphone AudioWorklet attached with voice clarity pre-filter.");
+    console.log("Microphone AudioWorklet attached.");
   } else {
     console.warn("No microphone stream available; only tab audio will be captured.");
   }
@@ -272,6 +237,7 @@ async function stopCapture() {
     try {
       await fetch(`http://localhost:8000/meetings/${currentMeetingId}/finish`, {
         method: "POST",
+        credentials: "include",
       });
     } catch (err) {
       console.warn("Failed to call finish endpoint:", err);

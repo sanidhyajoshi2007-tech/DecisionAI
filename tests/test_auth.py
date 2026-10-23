@@ -307,3 +307,37 @@ async def test_endpoint_rate_limiting_429():
     assert exc_info.value.headers["X-RateLimit-Limit"] == "2"
     assert exc_info.value.headers["X-RateLimit-Remaining"] == "0"
 
+
+@pytest.mark.asyncio
+async def test_personal_email_login_and_cookie(client: AsyncClient):
+    """Verify personal email login issues session cookie and creates personal user profile."""
+    # 1. Valid login
+    resp = await client.post(
+        "/auth/login",
+        json={"email": "personal.user@example.com", "name": "Personal User"},
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["status"] == "authenticated"
+    assert data["user"]["email"] == "personal.user@example.com"
+    assert "token" in data
+    assert "decisionai_session" in resp.cookies
+
+    # 2. Access /auth/me using the cookie
+    cookie_str = resp.cookies["decisionai_session"]
+    me_resp = await client.get(
+        "/auth/me",
+        cookies={"decisionai_session": cookie_str},
+    )
+    assert me_resp.status_code == 200
+    me_data = me_resp.json()
+    assert me_data["email"] == "personal.user@example.com"
+
+    # 3. Invalid email format rejection
+    bad_resp = await client.post(
+        "/auth/login",
+        json={"email": "notanemail"},
+    )
+    assert bad_resp.status_code == 400
+
+

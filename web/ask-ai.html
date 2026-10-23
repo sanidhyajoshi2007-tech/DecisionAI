@@ -98,6 +98,17 @@
         </button>
       </div>
 
+      <!-- AI Query Progress Bar -->
+      <div id="ai-query-progress" class="ai-query-progress hidden" aria-live="polite">
+        <div class="progress-header">
+          <span id="ai-progress-status" class="progress-status">Analyzing query...</span>
+          <span id="ai-progress-percent" class="progress-percent">25%</span>
+        </div>
+        <div class="progress-track">
+          <div id="ai-progress-bar" class="progress-fill" style="width: 25%;"></div>
+        </div>
+      </div>
+
       <!-- Input Form -->
       <form id="chat-form" style="display: flex; gap: var(--space-3); align-items: center;">
         <input

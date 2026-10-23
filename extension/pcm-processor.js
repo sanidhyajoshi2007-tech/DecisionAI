@@ -1,5 +1,5 @@
 /**
- * PCMRecorderProcessor — AudioWorkletProcessor
+ * PCMRecorderProcessor: AudioWorkletProcessor
  *
  * Runs in the Web Audio rendering thread at 16 kHz.
  * Downmixes input channels to mono, converts float [-1.0, 1.0] samples

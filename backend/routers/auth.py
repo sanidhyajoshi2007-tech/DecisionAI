@@ -4,9 +4,10 @@ from fastapi import APIRouter, Depends, Query, Request, Response, status
 from fastapi.responses import JSONResponse, RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from pydantic import BaseModel, Field
 from backend.auth import get_current_user, get_required_user
 from backend.config import Settings, get_settings
-from backend.crud.users import get_or_create_google_user
+from backend.crud.users import create_user, get_or_create_google_user, get_user_by_email
 from backend.database import get_db
 from backend.middleware.security import CSRF_COOKIE_NAME, generate_csrf_token
 from backend.models.user import User
@@ -41,6 +42,88 @@ async def get_csrf_token(
         path="/",
     )
     return {"csrf_token": token}
+
+
+# ── Local / Personal Login ────────────────────────────────
+
+class LocalLoginRequest(BaseModel):
+    email: str = Field(..., min_length=3, max_length=255)
+    name: str | None = Field(default=None, max_length=100)
+
+
+@router.post(
+    "/login",
+    summary="Sign in or register with email for personal profile",
+    dependencies=[Depends(rate_limit(requests_per_minute=30))],
+)
+async def local_login(
+    payload: LocalLoginRequest,
+    request: Request,
+    response: Response,
+    db: AsyncSession = Depends(get_db),
+    settings: Settings = Depends(get_settings),
+):
+    """
+    Creates or logs in as a personal user with email.
+    Sets secure session and CSRF cookies, and returns the profile.
+    """
+    email_val = str(payload.email).lower().strip()
+    if "@" not in email_val or "." not in email_val.split("@")[-1]:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=400, detail="Invalid email address format.")
+    user = await get_user_by_email(db, email_val)
+    if not user:
+        name_val = payload.name.strip() if payload.name and payload.name.strip() else email_val.split("@")[0].title()
+        user = await create_user(
+            db=db,
+            email=email_val,
+            name=name_val,
+        )
+        await db.commit()
+        await db.refresh(user)
+
+    await log_audit_event(
+        db=db,
+        action="login",
+        user_id=user.id,
+        target=f"user:{user.id}",
+        request=request,
+    )
+
+    session_token = create_session_token(
+        user_id=user.id,
+        email=user.email,
+        secret_key=settings.secret_key,
+        expires_in_days=settings.session_cookie_max_age_days,
+    )
+    max_age = settings.session_cookie_max_age_days * 86400
+
+    response.set_cookie(
+        key=settings.session_cookie_name,
+        value=session_token,
+        max_age=max_age,
+        httponly=True,
+        samesite=settings.session_cookie_samesite,
+        secure=settings.session_cookie_secure,
+        path="/",
+    )
+    csrf_token = generate_csrf_token()
+    response.set_cookie(
+        key=CSRF_COOKIE_NAME,
+        value=csrf_token,
+        max_age=max_age,
+        httponly=False,
+        samesite="lax",
+        secure=settings.session_cookie_secure,
+        path="/",
+    )
+
+    return {
+        "status": "authenticated",
+        "token": session_token,
+        "csrf_token": csrf_token,
+        "user": UserResponse.model_validate(user).model_dump(mode="json"),
+    }
 
 
 # ── Google OAuth Login ────────────────────────────────────
