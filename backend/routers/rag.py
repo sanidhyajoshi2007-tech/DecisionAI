@@ -15,6 +15,7 @@ from backend.database import get_db
 from backend.models.meeting import Meeting
 from backend.models.user import User
 from backend.schemas.rag import AskRequest, AskResponse
+from backend.services.audit import log_audit_event
 from backend.services.rate_limiter import default_rate_limiter
 from backend.services.rag.pipeline import (
     execute_rag_query,
@@ -63,6 +64,16 @@ async def ask_ai_endpoint(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=f"Meeting #{payload.meeting_id} not found or does not belong to you.",
             )
+
+    # Audit logging: record query occurrence with target scope, NEVER the question text or tokens
+    target_scope = f"scope:meeting:{payload.meeting_id}" if payload.meeting_id else "scope:all"
+    await log_audit_event(
+        db=db,
+        action="ask_ai",
+        user_id=current_user.id,
+        target=target_scope,
+        request=request,
+    )
 
     if payload.stream:
         return StreamingResponse(

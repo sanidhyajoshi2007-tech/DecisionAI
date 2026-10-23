@@ -3,15 +3,15 @@ Pydantic schemas for Decision API requests and responses.
 """
 
 from datetime import datetime
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class DecisionCreate(BaseModel):
     """Payload to create a decision or action item."""
-    text: str
-    type: str = "decision"
-    status: str = "accepted"
-    timestamp_ms: int = 0
+    text: str = Field(..., min_length=1, max_length=2000)
+    type: str = Field(default="decision", max_length=50)
+    status: str = Field(default="accepted", max_length=50)
+    timestamp_ms: int = Field(default=0, ge=0)
 
 
 class DecisionResponse(BaseModel):

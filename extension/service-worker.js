@@ -1,5 +1,5 @@
 /**
- * service-worker.js — Manifest V3 Background Service Worker
+ * service-worker.js: Manifest V3 Background Service Worker
  *
  * Coordinates recording lifecycle:
  * 1. Checks and locks state in chrome.storage.session to prevent double-starts.
@@ -23,7 +23,7 @@ chrome.runtime.onInstalled.addListener(async () => {
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.type === "START_RECORDING") {
-    handleStartRecording(message.tabId, message.title, message.hasMicPermission)
+    handleStartRecording(message.tabId, message.title, message.hasMicPermission, message.consentRecorded)
       .then((res) => sendResponse(res))
       .catch((err) => sendResponse({ success: false, error: err.message }));
     return true;
@@ -42,7 +42,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 });
 
-async function handleStartRecording(tabId, title, hasMicPermission) {
+async function handleStartRecording(tabId, title, hasMicPermission, consentRecorded) {
   const { recordingState = "idle" } = await chrome.storage.session.get("recordingState");
 
   if (recordingState !== "idle") {
@@ -59,7 +59,10 @@ async function handleStartRecording(tabId, title, hasMicPermission) {
       createRes = await fetch(`${BACKEND_BASE}/meetings`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ title: title || "Google Meet Call" }),
+        body: JSON.stringify({
+          title: title || "Google Meet Call",
+          consent_recorded: Boolean(consentRecorded),
+        }),
       });
     } catch (netErr) {
       throw new Error(`Cannot reach backend at ${BACKEND_BASE}. Make sure the FastAPI server is running.`);

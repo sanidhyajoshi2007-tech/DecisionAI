@@ -19,6 +19,7 @@ async def create_meeting(
     title: str = "Untitled Meeting",
     audio_path: str | None = None,
     status: MeetingStatus = MeetingStatus.RECORDING,
+    consent_recorded: bool = False,
 ) -> Meeting:
     """Create a new meeting record."""
     meeting = Meeting(
@@ -26,6 +27,7 @@ async def create_meeting(
         title=title,
         audio_path=audio_path,
         status=status,
+        consent_recorded=consent_recorded,
     )
     db.add(meeting)
     await db.flush()

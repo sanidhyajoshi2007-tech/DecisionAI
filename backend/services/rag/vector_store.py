@@ -242,6 +242,18 @@ class ChromaVectorStore:
         except Exception as e:
             logger.error(f"Error deleting meeting chunks from ChromaDB: {e}", exc_info=True)
 
+    def delete_user_data(self, user_id: int) -> None:
+        """
+        Delete all chunks belonging to a specific user across all their meetings.
+        """
+        try:
+            self.collection.delete(
+                where={"user_id": int(user_id)}
+            )
+            logger.info(f"Deleted all ChromaDB chunks for user {user_id}.")
+        except Exception as e:
+            logger.error(f"Error deleting user chunks from ChromaDB: {e}", exc_info=True)
+
 
 # Global singleton factory
 _vector_store_instance: ChromaVectorStore | None = None

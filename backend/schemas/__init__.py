@@ -2,7 +2,14 @@
 Pydantic schemas package - re-exports all request/response models.
 """
 
-from backend.schemas.user import UserCreate, UserResponse, ExtensionTokenResponse
+from backend.schemas.user import (
+    UserCreate,
+    UserResponse,
+    ExtensionTokenResponse,
+    UserSettingsUpdate,
+    UserSettingsResponse,
+    DeleteAllDataRequest,
+)
 from backend.schemas.meeting import (
     MeetingCreate,
     MeetingUpdate,
@@ -27,6 +34,9 @@ __all__ = [
     "UserCreate",
     "UserResponse",
     "ExtensionTokenResponse",
+    "UserSettingsUpdate",
+    "UserSettingsResponse",
+    "DeleteAllDataRequest",
     "MeetingCreate",
     "MeetingUpdate",
     "MeetingResponse",

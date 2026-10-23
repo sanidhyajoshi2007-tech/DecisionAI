@@ -17,7 +17,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from backend.config import get_settings
-from backend.routers import auth_router, meetings_router, rag_router
+from backend.middleware import CSRFProtectionMiddleware, SecurityHeadersMiddleware
+from backend.routers import auth_router, meetings_router, rag_router, users_router
 
 settings = get_settings()
 
@@ -49,11 +50,9 @@ app = FastAPI(
 )
 
 
-# ── CORS ─────────────────────────────────────────────────
-# Needed for:
-#   1. Chrome extension making fetch() calls to our API
-#   2. Frontend served from a different origin during dev
+# ── Security & CORS Middlewares ──────────────────────────
 
+# 1. CORS for extension and web frontends
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origin_list,
@@ -61,6 +60,12 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# 2. Security Hardening Headers (CSP, X-Frame-Options, X-Content-Type-Options, Referrer-Policy)
+app.add_middleware(SecurityHeadersMiddleware, settings=settings)
+
+# 3. Double-Submit CSRF Protection for state-changing browser requests
+app.add_middleware(CSRFProtectionMiddleware, settings=settings)
 
 
 # ── Health Check ─────────────────────────────────────────
@@ -79,6 +84,7 @@ async def health_check() -> dict[str, str]:
 app.include_router(auth_router)
 app.include_router(meetings_router)
 app.include_router(rag_router)
+app.include_router(users_router)
 
 
 # ── Static Files (Frontend) ─────────────────────────────

@@ -31,7 +31,11 @@
 
         <!-- Google Meet Tab Warning / Notice -->
         <div id="tabNotice" class="notice-card warning">
-            <div class="notice-icon">⚠️</div>
+            <div class="notice-icon">
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+                    <path d="M8 1a7 7 0 1 0 0 14A7 7 0 0 0 8 1zm0 3a.75.75 0 0 1 .75.75v3.5a.75.75 0 0 1-1.5 0v-3.5A.75.75 0 0 1 8 4zm0 8a1 1 0 1 1 0-2 1 1 0 0 1 0 2z"/>
+                </svg>
+            </div>
             <div class="notice-content">
                 <p id="noticeText">Navigate to a <strong>meet.google.com</strong> tab to start recording.</p>
             </div>
@@ -44,7 +48,7 @@
                 <span id="recordingTimer" class="timer-digits">00:00</span>
             </div>
             <div class="active-meeting-info">
-                <span>Meeting ID: <strong id="activeMeetingId">#—</strong></span>
+                <span>Meeting ID: <strong id="activeMeetingId">#-</strong></span>
                 <span class="channels-tag">2 Ch (Tab + Mic)</span>
             </div>
         </div>
@@ -58,13 +62,27 @@
         <!-- Microphone Status Indicator -->
         <div id="micStatusCard" class="mic-status-card">
             <div class="mic-status-left">
-                <span id="micStatusIcon" class="mic-status-icon">🎙️</span>
+                <span id="micStatusIcon" class="mic-status-icon">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+                        <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/>
+                        <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+                        <line x1="12" x2="12" y1="19" y2="22"/>
+                    </svg>
+                </span>
                 <div class="mic-status-info">
                     <span class="mic-status-title">Your Voice (Microphone)</span>
                     <span id="micStatusText" class="mic-status-text">Checking permission...</span>
                 </div>
             </div>
             <button id="enableMicBtn" class="btn-mic-action hidden" type="button">Enable</button>
+        </div>
+
+        <!-- Recording Consent Notice -->
+        <div id="consentSection" class="consent-section" style="margin-top: 12px; margin-bottom: 12px; padding: 10px 12px; background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 8px;">
+            <label style="display: flex; align-items: flex-start; gap: 8px; font-size: 11px; cursor: pointer; color: #cbd5e1; line-height: 1.4;">
+                <input type="checkbox" id="consentCheckbox" style="margin-top: 2px;">
+                <span>I confirm that all call participants have been notified and consented to recording this meeting.</span>
+            </label>
         </div>
 
         <!-- Action Controls -->

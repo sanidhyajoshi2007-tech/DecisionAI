@@ -1,5 +1,5 @@
 """
-SQLAlchemy ORM models — Meeting and TranscriptSegment.
+SQLAlchemy ORM models: Meeting and TranscriptSegment.
 
 Meeting tracks the lifecycle: uploading → processing → ready → error.
 TranscriptSegment stores individual chunks of transcribed text with
@@ -17,6 +17,7 @@ from sqlalchemy import (
     DateTime,
     ForeignKey,
     Enum,
+    Boolean,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -57,6 +58,7 @@ class Meeting(Base):
     audio_path: Mapped[str | None] = mapped_column(String(1000), nullable=True)
     duration_seconds: Mapped[float | None] = mapped_column(Float, nullable=True)
     summary: Mapped[str | None] = mapped_column(Text, nullable=True)
+    consent_recorded: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     # Optional error message when status == FAILED / ERROR
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
 

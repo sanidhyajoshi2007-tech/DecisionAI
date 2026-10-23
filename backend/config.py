@@ -87,6 +87,11 @@ class Settings(BaseSettings):
     # ── LLM ──
     llm_provider: str = "gemini"
 
+    # Limits and Validation
+    max_audio_duration_seconds: int = 86400  # 24 hours max
+    max_title_length: int = 200
+    max_glossary_terms: int = 100
+
     # ── CORS ──
     cors_origins: str = "http://localhost:8000"
 
@@ -97,8 +102,9 @@ class Settings(BaseSettings):
 
     @property
     def glossary_list(self) -> list[str]:
-        """Parse comma-separated glossary hints into a list."""
-        return [g.strip() for g in self.transcription_glossary.split(",") if g.strip()]
+        """Parse comma-separated glossary hints into a list, capped at max_glossary_terms."""
+        items = [g.strip() for g in self.transcription_glossary.split(",") if g.strip()]
+        return items[:self.max_glossary_terms]
 
     @property
     def max_upload_bytes(self) -> int:

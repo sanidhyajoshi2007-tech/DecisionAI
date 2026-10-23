@@ -65,6 +65,12 @@ function showToast(message, duration = 3000) {
   }, duration);
 }
 
+// CSRF Token Helper
+function getCsrfToken() {
+  const match = document.cookie.match(new RegExp('(^| )decisionai_csrf=([^;]+)'));
+  return match ? decodeURIComponent(match[2]) : '';
+}
+
 // API Client
 const API = {
   async fetchCurrentUser() {
@@ -81,7 +87,12 @@ const API = {
 
   async logout() {
     try {
-      await fetch('/auth/logout', { method: 'POST' });
+      await fetch('/auth/logout', {
+        method: 'POST',
+        headers: {
+          'X-CSRF-Token': getCsrfToken(),
+        },
+      });
     } finally {
       window.location.href = '/web/login.html';
     }
@@ -106,7 +117,10 @@ const API = {
   async updateMeetingTitle(id, title) {
     const res = await fetch(`/api/meetings/${id}`, {
       method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRF-Token': getCsrfToken(),
+      },
       body: JSON.stringify({ title }),
     });
     if (!res.ok) {
@@ -118,6 +132,9 @@ const API = {
   async deleteMeeting(id) {
     const res = await fetch(`/api/meetings/${id}`, {
       method: 'DELETE',
+      headers: {
+        'X-CSRF-Token': getCsrfToken(),
+      },
     });
     if (!res.ok) {
       throw new Error(`Could not delete meeting (Status ${res.status})`);
@@ -151,7 +168,10 @@ const API = {
 
       const res = await fetch('/api/ask', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRF-Token': getCsrfToken(),
+        },
         body: JSON.stringify(payload),
       });
 
@@ -196,6 +216,60 @@ const API = {
     } catch (err) {
       if (onError) onError(err);
     }
+  },
+
+  async getUserSettings() {
+    const res = await fetch('/api/users/me/settings');
+    if (!res.ok) {
+      throw new Error(`Failed to load settings (Status ${res.status})`);
+    }
+    return await res.json();
+  },
+
+  async updateUserSettings(retentionDays) {
+    const res = await fetch('/api/users/me/settings', {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRF-Token': getCsrfToken(),
+      },
+      body: JSON.stringify({ retention_days: retentionDays }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || `Failed to update retention (Status ${res.status})`);
+    }
+    return await res.json();
+  },
+
+  async deleteAllUserData(confirmation) {
+    const res = await fetch('/api/users/me/delete-all-data', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRF-Token': getCsrfToken(),
+      },
+      body: JSON.stringify({ confirmation }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || `Failed to delete all data (Status ${res.status})`);
+    }
+    return await res.json();
+  },
+
+  async runRetentionCleanup() {
+    const res = await fetch('/api/retention/run-cleanup', {
+      method: 'POST',
+      headers: {
+        'X-CSRF-Token': getCsrfToken(),
+      },
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || `Cleanup failed (Status ${res.status})`);
+    }
+    return await res.json();
   },
 };
 
@@ -261,12 +335,15 @@ async function initDashboardPage() {
   if (userSlot) {
     if (user && user.email) {
       userSlot.innerHTML = `
-        <span style="font-size: var(--text-xs); color: var(--text-secondary);">${user.name || user.email}</span>
+        <span style="font-size: var(--text-xs); color: var(--text-secondary);">${escapeHtml(user.name || user.email)}</span>
+        <a href="/web/settings.html" class="btn btn-secondary btn-sm">Settings</a>
+        <a href="/web/privacy.html" class="btn btn-secondary btn-sm">Privacy</a>
         <button id="logout-btn" class="btn btn-secondary btn-sm" type="button">Logout</button>
       `;
       document.getElementById('logout-btn')?.addEventListener('click', API.logout);
     } else {
       userSlot.innerHTML = `
+        <a href="/web/privacy.html" class="btn btn-secondary btn-sm">Privacy</a>
         <a href="/web/login.html" class="btn btn-primary btn-sm">Login</a>
       `;
     }
@@ -1075,6 +1152,132 @@ function escapeHtml(str) {
     .replace(/'/g, '&#039;');
 }
 
+
+// Settings Page Controller
+async function initSettingsPage() {
+  initTheme();
+  const user = await API.fetchCurrentUser();
+  const userSlot = document.getElementById('user-profile-slot');
+  if (userSlot) {
+    if (user && user.email) {
+      userSlot.innerHTML = `
+        <span style="font-size: var(--text-xs); color: var(--text-secondary);">${escapeHtml(user.name || user.email)}</span>
+        <a href="/web/privacy.html" class="btn btn-secondary btn-sm">Privacy</a>
+        <button id="logout-btn" class="btn btn-secondary btn-sm" type="button">Logout</button>
+      `;
+      document.getElementById('logout-btn')?.addEventListener('click', API.logout);
+    } else {
+      userSlot.innerHTML = `
+        <a href="/web/privacy.html" class="btn btn-secondary btn-sm">Privacy</a>
+        <a href="/web/login.html" class="btn btn-primary btn-sm">Login</a>
+      `;
+    }
+  }
+
+  // Load Retention Settings
+  try {
+    const settingsData = await API.getUserSettings();
+    const days = settingsData.retention_days;
+    if (days === 30) {
+      const el = document.getElementById('retention-30');
+      if (el) el.checked = true;
+    } else if (days === 90) {
+      const el = document.getElementById('retention-90');
+      if (el) el.checked = true;
+    } else if (days === 365) {
+      const el = document.getElementById('retention-365');
+      if (el) el.checked = true;
+    } else {
+      const el = document.getElementById('retention-forever');
+      if (el) el.checked = true;
+    }
+  } catch (err) {
+    console.error('Could not load user settings:', err);
+  }
+
+  // Retention Form Submission
+  const retentionForm = document.getElementById('retention-form');
+  const retentionStatus = document.getElementById('retention-status');
+  if (retentionForm) {
+    retentionForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const selected = document.querySelector('input[name="retention_days"]:checked');
+      if (!selected) return;
+      const days = parseInt(selected.value, 10);
+      try {
+        await API.updateUserSettings(days === 0 ? null : days);
+        showToast('Retention policy updated successfully.');
+        if (retentionStatus) {
+          retentionStatus.textContent = days === 0 ? 'Data retention set to: Keep Forever.' : `Data retention set to: ${days} days.`;
+        }
+      } catch (err) {
+        showToast(`Failed to update retention: ${err.message}`);
+        if (retentionStatus) {
+          retentionStatus.textContent = err.message;
+        }
+      }
+    });
+  }
+
+  // Manual Retention Cleanup Button
+  const runCleanupBtn = document.getElementById('run-cleanup-btn');
+  if (runCleanupBtn) {
+    runCleanupBtn.addEventListener('click', async () => {
+      runCleanupBtn.disabled = true;
+      runCleanupBtn.textContent = 'Running Cleanup...';
+      try {
+        const res = await API.runRetentionCleanup();
+        showToast(`Cleanup completed: ${res.deleted_meetings} expired meetings removed.`);
+      } catch (err) {
+        showToast(`Cleanup error: ${err.message}`);
+      } finally {
+        runCleanupBtn.disabled = false;
+        runCleanupBtn.textContent = 'Run Retention Cleanup Now';
+      }
+    });
+  }
+
+  // Delete All My Data Confirmation
+  const confirmInput = document.getElementById('delete-confirm-input');
+  const deleteAllBtn = document.getElementById('delete-all-btn');
+  const deleteStatus = document.getElementById('delete-status');
+
+  if (confirmInput && deleteAllBtn) {
+    confirmInput.addEventListener('input', () => {
+      const matches = confirmInput.value.trim() === 'DELETE ALL MY DATA';
+      deleteAllBtn.disabled = !matches;
+      if (matches) {
+        deleteAllBtn.style.cursor = 'pointer';
+        deleteAllBtn.style.opacity = '1';
+      } else {
+        deleteAllBtn.style.cursor = 'not-allowed';
+        deleteAllBtn.style.opacity = '0.5';
+      }
+    });
+
+    deleteAllBtn.addEventListener('click', async () => {
+      if (confirmInput.value.trim() !== 'DELETE ALL MY DATA') return;
+      if (!confirm('Are you absolutely certain? This will delete all your meetings, audio, and account permanently.')) {
+        return;
+      }
+      deleteAllBtn.disabled = true;
+      deleteAllBtn.textContent = 'Deleting All Data...';
+      try {
+        await API.deleteAllUserData('DELETE ALL MY DATA');
+        showToast('All your data has been permanently deleted.');
+        setTimeout(() => {
+          window.location.href = '/web/login.html';
+        }, 1200);
+      } catch (err) {
+        if (deleteStatus) deleteStatus.textContent = err.message;
+        showToast(`Deletion failed: ${err.message}`);
+        deleteAllBtn.disabled = false;
+        deleteAllBtn.textContent = 'Permanently Delete All My Data';
+      }
+    });
+  }
+}
+
 // Global initialization
 document.addEventListener('DOMContentLoaded', () => {
   initTheme();
@@ -1083,3 +1286,4 @@ document.addEventListener('DOMContentLoaded', () => {
     themeToggle.addEventListener('click', toggleTheme);
   }
 });
+

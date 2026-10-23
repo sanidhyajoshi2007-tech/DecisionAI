@@ -1,5 +1,5 @@
 """
-SQLAlchemy ORM models — User.
+SQLAlchemy ORM models: User.
 
 Minimal for now (no OAuth fields yet). The dev user (id=1) is
 hardcoded until Google OAuth is added.
@@ -7,7 +7,7 @@ hardcoded until Google OAuth is added.
 
 from datetime import datetime, timezone
 
-from sqlalchemy import String, DateTime
+from sqlalchemy import String, DateTime, Integer
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from backend.models.base import Base
@@ -21,6 +21,7 @@ class User(Base):
     name: Mapped[str] = mapped_column(String(255))
     avatar_url: Mapped[str | None] = mapped_column(String(1000), nullable=True)
     google_id: Mapped[str | None] = mapped_column(String(255), unique=True, index=True, nullable=True)
+    retention_days: Mapped[int | None] = mapped_column(Integer, nullable=True, default=None)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc),

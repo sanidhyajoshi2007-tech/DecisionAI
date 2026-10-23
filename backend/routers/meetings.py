@@ -1,5 +1,7 @@
 """Meeting API routes - handles audio upload, live audio streaming, and meeting viewer."""
 
+import html
+import json
 from fastapi import (
     APIRouter,
     BackgroundTasks,
@@ -7,13 +9,16 @@ from fastapi import (
     File,
     Form,
     HTTPException,
+    Path,
     Query,
+    Request,
+    Response,
     UploadFile,
     WebSocket,
     WebSocketDisconnect,
     status,
 )
-from fastapi.responses import FileResponse, HTMLResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.auth import get_current_user
@@ -51,9 +56,12 @@ from backend.services.audio_streamer import (
     get_or_create_writer,
     parse_audio_chunk,
 )
+from backend.services.audit import log_audit_event
 from backend.services.auth import decode_token
+from backend.services.rag.vector_store import get_vector_store
 from backend.services.rate_limiter import rate_limit
 from backend.services.storage import (
+    get_storage_service,
     save_audio_file,
     validate_audio_file,
 )
@@ -78,6 +86,7 @@ router = APIRouter(tags=["meetings"])
     dependencies=[Depends(rate_limit(requests_per_minute=60))],
 )
 async def create_new_meeting(
+    request: Request,
     payload: MeetingCreate | None = None,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -87,12 +96,25 @@ async def create_new_meeting(
     Create a meeting record ahead of live WebSocket streaming, scoped to current_user.
     """
     title = payload.title if payload and payload.title else "Google Meet Call"
+    clean_title = title.strip()[:settings.max_title_length]
+    consent = payload.consent_recorded if payload else False
+
     meeting = await create_meeting(
         db=db,
         user_id=current_user.id,
-        title=title,
+        title=clean_title,
         status=MeetingStatus.RECORDING,
+        consent_recorded=consent,
     )
+
+    await log_audit_event(
+        db=db,
+        action="meeting_create",
+        user_id=current_user.id,
+        target=f"meeting:{meeting.id}",
+        request=request,
+    )
+
     return MeetingResponse.model_validate(meeting)
 
 
@@ -112,6 +134,7 @@ async def create_new_meeting(
     include_in_schema=False,
 )
 async def upload_meeting_audio(
+    request: Request,
     file: UploadFile | None = File(None, description="Audio file blob"),
     audio_file: UploadFile | None = File(None, description="Alternative field name for audio file"),
     title: str = Form("Untitled Meeting", description="Meeting title"),
@@ -122,6 +145,18 @@ async def upload_meeting_audio(
     """
     Accept a completed audio recording file from the Chrome extension or dashboard.
     """
+    # Enforce upload size check from Content-Length header if present
+    content_length = request.headers.get("content-length")
+    if content_length:
+        try:
+            if int(content_length) > settings.max_upload_bytes:
+                raise HTTPException(
+                    status_code=getattr(status, "HTTP_413_CONTENT_TOO_LARGE", 413),
+                    detail=f"File size exceeds maximum limit of {settings.max_upload_size_mb} MB",
+                )
+        except ValueError:
+            pass
+
     actual_file = file or audio_file
     if actual_file is None:
         raise HTTPException(
@@ -129,13 +164,14 @@ async def upload_meeting_audio(
             detail="An audio file must be provided under field 'file' or 'audio_file'",
         )
 
-    clean_title = title.strip() if title and title.strip() else "Untitled Meeting"
+    clean_title = title.strip()[:settings.max_title_length] if title and title.strip() else "Untitled Meeting"
     ext = validate_audio_file(actual_file)
 
     meeting = await create_meeting(
         db=db,
         user_id=current_user.id,
         title=clean_title,
+        consent_recorded=True,
     )
 
     try:
@@ -150,6 +186,14 @@ async def upload_meeting_audio(
     except Exception:
         await delete_meeting(db, meeting_id=meeting.id, user_id=current_user.id)
         raise
+
+    await log_audit_event(
+        db=db,
+        action="meeting_create",
+        user_id=current_user.id,
+        target=f"meeting:{meeting.id}",
+        request=request,
+    )
 
     return MeetingResponse.model_validate(meeting)
 
@@ -224,8 +268,8 @@ async def websocket_meeting_stream(
     dependencies=[Depends(rate_limit(requests_per_minute=60))],
 )
 async def finish_meeting_recording(
-    meeting_id: int,
     background_tasks: BackgroundTasks,
+    meeting_id: int = Path(..., ge=1, le=2_147_483_647, description="Positive integer meeting ID"),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
     settings: Settings = Depends(get_settings),
@@ -245,6 +289,19 @@ async def finish_meeting_recording(
 
     if not meeting:
         meeting = await create_meeting(db, user_id=current_user.id, title="Google Meet Call", status=MeetingStatus.PROCESSING)
+
+    # Validate audio duration limit
+    if duration > settings.max_audio_duration_seconds:
+        meeting.status = MeetingStatus.FAILED
+        meeting.error_message = f"Audio duration ({round(duration, 1)}s) exceeds maximum limit of {settings.max_audio_duration_seconds}s."
+        await db.commit()
+        await db.refresh(meeting)
+        return {
+            "status": meeting.status.value,
+            "meeting_id": meeting_id,
+            "title": meeting.title,
+            "error": meeting.error_message,
+        }
 
     # Launch background transcription & LLM post-processing task if audio files exist
     if duration > 0.0 or (tab_path.exists() and tab_path.stat().st_size > 44):
@@ -287,8 +344,8 @@ async def finish_meeting_recording(
 @router.get("/meetings/{meeting_id}/audio/{channel}")
 @router.get("/api/meetings/{meeting_id}/audio/{channel}", include_in_schema=False)
 async def get_meeting_audio_file(
-    meeting_id: int,
-    channel: str,
+    meeting_id: int = Path(..., ge=1, le=2_147_483_647, description="Positive integer meeting ID"),
+    channel: str = Path(..., pattern="^(tab|mic)$", description="Audio channel (tab or mic)"),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
     settings: Settings = Depends(get_settings),
@@ -319,7 +376,7 @@ async def get_meeting_audio_file(
 
 @router.get("/meetings/{meeting_id}", response_class=HTMLResponse)
 async def view_meeting_page(
-    meeting_id: int,
+    meeting_id: int = Path(..., ge=1, le=2_147_483_647, description="Positive integer meeting ID"),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
     settings: Settings = Depends(get_settings),
@@ -333,7 +390,7 @@ async def view_meeting_page(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Meeting not found or you do not have permission to view it",
         )
-    title = meeting.title
+    title = html.escape(meeting.title or "Untitled Meeting")
     duration_val = meeting.duration_seconds if meeting.duration_seconds is not None else 0.0
     duration_str = f"{duration_val:.1f}s"
     status_str = meeting.status.value
@@ -361,13 +418,14 @@ async def view_meeting_page(
 
     summary_html = ""
     if meeting and meeting.summary:
+        summary_escaped = html.escape(meeting.summary)
         summary_html = f"""
         <div style="background: rgba(99, 102, 241, 0.08); border: 1px solid rgba(99, 102, 241, 0.25); border-radius: 14px; padding: 20px 22px; margin-top: 24px; margin-bottom: 24px;">
             <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 10px;">
-                <span style="font-size: 1.2rem;">✨</span>
+                <span style="font-size: 0.82rem; font-weight: 700; background: rgba(99, 102, 241, 0.2); color: #a5b4fc; padding: 2px 8px; border-radius: 4px; text-transform: uppercase;">Summary</span>
                 <span style="font-size: 1rem; font-weight: 700; color: #a5b4fc;">Meeting Summary & Key Takeaways</span>
             </div>
-            <div style="font-size: 0.92rem; color: #e2e8f0; line-height: 1.6; white-space: pre-wrap;">{meeting.summary}</div>
+            <div style="font-size: 0.92rem; color: #e2e8f0; line-height: 1.6; white-space: pre-wrap;">{summary_escaped}</div>
         </div>
         """
 
@@ -375,18 +433,19 @@ async def view_meeting_page(
     if decisions:
         item_rows = []
         for d in decisions:
-            type_label = (d.type or "decision").replace("_", " ").title()
+            type_label = html.escape((d.type or "decision").replace("_", " ").title())
             type_bg = "rgba(56, 189, 248, 0.15)" if d.type == "decision" else ("rgba(244, 114, 182, 0.15)" if d.type == "action_item" else "rgba(251, 191, 36, 0.15)")
             type_color = "#38bdf8" if d.type == "decision" else ("#f472b6" if d.type == "action_item" else "#fbbf24")
 
-            status_val = d.status or "accepted"
-            status_bg = "rgba(34, 197, 94, 0.15)" if status_val == "accepted" else ("rgba(239, 68, 68, 0.15)" if status_val == "rejected" else "rgba(245, 158, 11, 0.15)")
-            status_color = "#4ade80" if status_val == "accepted" else ("#f87171" if status_val == "rejected" else "#fbbf24")
+            status_val = html.escape(d.status or "accepted")
+            status_bg = "rgba(34, 197, 94, 0.15)" if d.status == "accepted" else ("rgba(239, 68, 68, 0.15)" if d.status == "rejected" else "rgba(245, 158, 11, 0.15)")
+            status_color = "#4ade80" if d.status == "accepted" else ("#f87171" if d.status == "rejected" else "#fbbf24")
 
             ts_sec = (d.timestamp_ms or 0) / 1000.0
             ts_min = int(ts_sec // 60)
             ts_s = int(ts_sec % 60)
             time_str = f"{ts_min:02d}:{ts_s:02d}"
+            d_text = html.escape(d.text or "")
 
             item_rows.append(f"""
             <div style="background: rgba(255, 255, 255, 0.02); border: 1px solid rgba(255, 255, 255, 0.06); border-radius: 10px; padding: 12px 16px; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; gap: 14px;">
@@ -394,9 +453,9 @@ async def view_meeting_page(
                     <div style="display: flex; align-items: center; gap: 8px;">
                         <span style="font-size: 0.72rem; font-weight: 700; background: {type_bg}; color: {type_color}; padding: 2px 8px; border-radius: 6px; text-transform: uppercase;">{type_label}</span>
                         <span style="font-size: 0.72rem; font-weight: 600; background: {status_bg}; color: {status_color}; padding: 2px 8px; border-radius: 6px; text-transform: uppercase;">{status_val}</span>
-                        <span style="font-size: 0.72rem; color: #64748b; font-family: monospace;">⏱️ {time_str}</span>
+                        <span style="font-size: 0.72rem; color: #64748b; font-family: monospace;">Time: {time_str}</span>
                     </div>
-                    <div style="font-size: 0.9rem; color: #f1f5f9; line-height: 1.4; margin-top: 2px;">{d.text}</div>
+                    <div style="font-size: 0.9rem; color: #f1f5f9; line-height: 1.4; margin-top: 2px;">{d_text}</div>
                 </div>
             </div>
             """)
@@ -405,7 +464,7 @@ async def view_meeting_page(
         <div style="margin-top: 24px; margin-bottom: 24px;">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
                 <h3 style="font-size: 1.05rem; font-weight: 600; color: #f1f5f9; display: flex; align-items: center; gap: 8px;">
-                    <span>🎯 Decisions, Action Items & Client Requests</span>
+                    <span>Decisions, Action Items & Client Requests</span>
                     <span style="font-size: 0.75rem; color: #94a3b8; font-weight: 400;">({len(decisions)} extracted)</span>
                 </h3>
             </div>
@@ -428,15 +487,18 @@ async def view_meeting_page(
             e_sec = int(s.end_time % 60)
             time_str = f"{s_min:02d}:{s_sec:02d} - {e_min:02d}:{e_sec:02d}"
 
+            speaker_escaped = html.escape(s.speaker or "Speaker")
+            seg_text_escaped = html.escape(s.text or "")
+
             segment_items.append(f"""
             <div style="background: rgba(255, 255, 255, 0.02); border: 1px solid rgba(255, 255, 255, 0.05); border-radius: 10px; padding: 12px 16px; margin-bottom: 10px;">
                 <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
                     <span style="font-size: 0.78rem; font-weight: 600; background: {speaker_bg}; color: {speaker_color}; border: 1px solid {speaker_border}; padding: 2px 8px; border-radius: 6px;">
-                        {s.speaker or "Speaker"}
+                        {speaker_escaped}
                     </span>
                     <span style="font-size: 0.75rem; color: #64748b; font-family: monospace;">{time_str}</span>
                 </div>
-                <div style="font-size: 0.92rem; color: #f1f5f9; line-height: 1.5;">{s.text}</div>
+                <div style="font-size: 0.92rem; color: #f1f5f9; line-height: 1.5;">{seg_text_escaped}</div>
             </div>
             """)
 
@@ -444,7 +506,7 @@ async def view_meeting_page(
         <div style="margin-top: 24px; margin-bottom: 24px;">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
                 <h3 style="font-size: 1.05rem; font-weight: 600; color: #f1f5f9; display: flex; align-items: center; gap: 8px;">
-                    <span>📝 Multi-Speaker Transcript</span>
+                    <span>Multi-Speaker Transcript</span>
                     <span style="font-size: 0.75rem; color: #94a3b8; font-weight: 400;">({len(segments)} segments merged)</span>
                 </h3>
             </div>
@@ -454,7 +516,6 @@ async def view_meeting_page(
     elif meeting and meeting.status == MeetingStatus.RECORDING:
         transcript_html = """
         <div style="background: rgba(239, 68, 68, 0.08); border: 1px solid rgba(239, 68, 68, 0.25); border-radius: 12px; padding: 18px 20px; margin-top: 24px; margin-bottom: 24px; display: flex; align-items: center; gap: 12px; color: #fca5a5; font-size: 0.88rem;">
-            <span style="font-size: 1.4rem;">🔴</span>
             <div>
                 <div style="font-weight: 600; color: #f87171; margin-bottom: 2px;">Live Audio Recording in Progress...</div>
                 <div style="color: #94a3b8;">Capturing audio streams from Google Meet call. Click 'Stop Recording' in the extension popup when finished.</div>
@@ -464,7 +525,6 @@ async def view_meeting_page(
     elif meeting and meeting.status == MeetingStatus.PROCESSING:
         transcript_html = """
         <div style="background: rgba(56, 189, 248, 0.08); border: 1px solid rgba(56, 189, 248, 0.25); border-radius: 12px; padding: 18px 20px; margin-top: 24px; margin-bottom: 24px; display: flex; align-items: center; gap: 12px; color: #7dd3fc; font-size: 0.88rem;">
-            <span style="font-size: 1.4rem;">⏳</span>
             <div>
                 <div style="font-weight: 600; color: #38bdf8; margin-bottom: 2px;">Processing Meeting (Transcription & AI Extraction)...</div>
                 <div style="color: #94a3b8;">Running multi-speaker speech transcription, glossary cleanup, executive summary, and structured decisions extraction. Please refresh in a few moments.</div>
@@ -472,11 +532,11 @@ async def view_meeting_page(
         </div>
         """
     elif meeting and (meeting.status in (MeetingStatus.FAILED, MeetingStatus.ERROR) or meeting.error_message):
-        err = meeting.error_message or "Meeting processing failed"
+        err = html.escape(meeting.error_message or "Meeting processing failed")
         transcript_html = f"""
         <div style="background: rgba(239, 68, 68, 0.08); border: 1px solid rgba(239, 68, 68, 0.28); border-radius: 12px; padding: 18px 20px; margin-top: 24px; margin-bottom: 24px; color: #fca5a5; font-size: 0.88rem;">
             <div style="font-weight: 600; color: #f87171; margin-bottom: 6px; display: flex; align-items: center; gap: 8px;">
-                <span>⚠️</span> <span>Processing Error</span>
+                <span>Processing Error</span>
             </div>
             <div style="line-height: 1.5; color: #e2e8f0; font-family: monospace; font-size: 0.82rem; word-break: break-all; background: rgba(0,0,0,0.3); padding: 10px; border-radius: 6px; margin-top: 8px;">{err}</div>
         </div>
@@ -493,7 +553,7 @@ async def view_meeting_page(
         empty_notice = """
         <div style="background: rgba(239, 68, 68, 0.12); border: 1px solid rgba(239, 68, 68, 0.35); border-radius: 10px; padding: 16px 20px; margin-bottom: 24px; color: #fca5a5; font-size: 0.9rem; line-height: 1.5;">
             <div style="font-weight: 600; color: #f87171; margin-bottom: 6px; display: flex; align-items: center; gap: 8px;">
-                <span>⚠️</span> <span>No Audio Data Captured (0.0s)</span>
+                <span>No Audio Data Captured (0.0s)</span>
             </div>
             <div>The recording finished without capturing audio samples. Common reasons:</div>
             <ul style="margin: 6px 0 0 20px;">
@@ -504,7 +564,7 @@ async def view_meeting_page(
         </div>
         """
 
-    html = f"""<!DOCTYPE html>
+    rendered_html = f"""<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -1265,7 +1325,7 @@ async def view_meeting_page(
     </script>
 </body>
 </html>"""
-    return HTMLResponse(content=html)
+    return HTMLResponse(content=rendered_html)
 
 
 # ── Meetings REST API (User Scoped) ───────────────────────
@@ -1303,7 +1363,7 @@ async def list_user_meetings(
     dependencies=[Depends(rate_limit(requests_per_minute=60))],
 )
 async def get_user_meeting(
-    meeting_id: int,
+    meeting_id: int = Path(..., ge=1, le=2_147_483_647, description="Positive integer meeting ID"),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> MeetingResponse:
@@ -1320,8 +1380,9 @@ async def get_user_meeting(
     dependencies=[Depends(rate_limit(requests_per_minute=30))],
 )
 async def update_user_meeting(
-    meeting_id: int,
+    request: Request,
     payload: MeetingUpdate,
+    meeting_id: int = Path(..., ge=1, le=2_147_483_647, description="Positive integer meeting ID"),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
     settings: Settings = Depends(get_settings),
@@ -1341,6 +1402,15 @@ async def update_user_meeting(
             meeting = m
     if not meeting:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Meeting not found")
+
+    await log_audit_event(
+        db=db,
+        action="meeting_rename",
+        user_id=current_user.id,
+        target=f"meeting:{meeting_id}",
+        request=request,
+    )
+
     return MeetingResponse.model_validate(meeting)
 
 
@@ -1351,7 +1421,7 @@ async def update_user_meeting(
     dependencies=[Depends(rate_limit(requests_per_minute=60))],
 )
 async def get_meeting_transcript(
-    meeting_id: int,
+    meeting_id: int = Path(..., ge=1, le=2_147_483_647, description="Positive integer meeting ID"),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
     settings: Settings = Depends(get_settings),
@@ -1376,14 +1446,142 @@ async def get_meeting_transcript(
     dependencies=[Depends(rate_limit(requests_per_minute=30))],
 )
 async def delete_user_meeting(
-    meeting_id: int,
+    request: Request,
+    meeting_id: int = Path(..., ge=1, le=2_147_483_647, description="Positive integer meeting ID"),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    settings: Settings = Depends(get_settings),
 ) -> dict[str, str]:
-    deleted = await delete_meeting(db, meeting_id=meeting_id, user_id=current_user.id)
-    if not deleted:
+    meeting = await get_meeting(db, meeting_id=meeting_id, user_id=current_user.id)
+    if not meeting:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Meeting not found")
+
+    # 1. Clean up audio files using StorageService
+    storage = get_storage_service(settings=settings)
+    storage.delete_meeting_audio(
+        user_id=current_user.id,
+        meeting_id=meeting_id,
+        audio_path=meeting.audio_path,
+    )
+
+    # 2. Clean up ChromaDB vector chunks
+    try:
+        vs = get_vector_store(settings=settings)
+        vs.delete_meeting(meeting_id=meeting_id, user_id=current_user.id)
+    except Exception:
+        pass
+
+    # 3. Delete database record
+    await delete_meeting(db, meeting_id=meeting_id, user_id=current_user.id)
+
+    # 4. Log audit event
+    await log_audit_event(
+        db=db,
+        action="meeting_delete",
+        user_id=current_user.id,
+        target=f"meeting:{meeting_id}",
+        request=request,
+    )
+
     return {"status": "deleted", "meeting_id": str(meeting_id)}
+
+
+# ── Meeting Exports (Plain Text and JSON) ──────────────────
+
+@router.get(
+    "/api/meetings/{meeting_id}/export/txt",
+    summary="Export meeting transcript as plain text",
+    dependencies=[Depends(rate_limit(requests_per_minute=30))],
+)
+async def export_transcript_txt(
+    request: Request,
+    meeting_id: int = Path(..., ge=1, le=2_147_483_647, description="Positive integer meeting ID"),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> Response:
+    meeting = await get_meeting(db, meeting_id=meeting_id, user_id=current_user.id)
+    if not meeting:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Meeting not found")
+
+    segments = await get_segments(db, meeting_id=meeting_id, user_id=current_user.id)
+
+    lines = [
+        f"Meeting Title: {meeting.title}",
+        f"Meeting Date: {meeting.created_at.isoformat() if meeting.created_at else 'Unknown'}",
+        f"Duration: {meeting.duration_seconds or 0:.1f}s",
+        "",
+        "=== SUMMARY ===",
+        meeting.summary or "No summary available.",
+        "",
+        "=== TRANSCRIPT ===",
+    ]
+    for s in segments:
+        m = int(s.start_time // 60)
+        sec = int(s.start_time % 60)
+        speaker = s.speaker or "Speaker"
+        lines.append(f"[{m:02d}:{sec:02d}] {speaker}: {s.text}")
+
+    content = "\n".join(lines)
+
+    await log_audit_event(
+        db=db,
+        action="export_txt",
+        user_id=current_user.id,
+        target=f"meeting:{meeting_id}",
+        request=request,
+    )
+
+    return Response(
+        content=content,
+        media_type="text/plain; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="meeting_{meeting_id}_transcript.txt"'},
+    )
+
+
+@router.get(
+    "/api/meetings/{meeting_id}/export/json",
+    summary="Export meeting transcript and decisions as JSON",
+    dependencies=[Depends(rate_limit(requests_per_minute=30))],
+)
+async def export_transcript_json(
+    request: Request,
+    meeting_id: int = Path(..., ge=1, le=2_147_483_647, description="Positive integer meeting ID"),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> JSONResponse:
+    meeting = await get_meeting(db, meeting_id=meeting_id, user_id=current_user.id)
+    if not meeting:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Meeting not found")
+
+    segments = await get_segments(db, meeting_id=meeting_id, user_id=current_user.id)
+    decisions = await list_decisions(db, meeting_id=meeting_id, user_id=current_user.id)
+
+    export_data = {
+        "meeting": {
+            "id": meeting.id,
+            "title": meeting.title,
+            "status": meeting.status.value,
+            "created_at": meeting.created_at.isoformat() if meeting.created_at else None,
+            "duration_seconds": meeting.duration_seconds,
+            "summary": meeting.summary,
+            "consent_recorded": meeting.consent_recorded,
+        },
+        "decisions": [DecisionResponse.model_validate(d).model_dump(mode="json") for d in decisions],
+        "transcript": [TranscriptSegmentResponse.model_validate(s).model_dump(mode="json") for s in segments],
+    }
+
+    await log_audit_event(
+        db=db,
+        action="export_json",
+        user_id=current_user.id,
+        target=f"meeting:{meeting_id}",
+        request=request,
+    )
+
+    return JSONResponse(
+        content=export_data,
+        headers={"Content-Disposition": f'attachment; filename="meeting_{meeting_id}_export.json"'},
+    )
 
 
 # ── Decisions REST API (User Scoped) ──────────────────────
@@ -1395,7 +1593,7 @@ async def delete_user_meeting(
     dependencies=[Depends(rate_limit(requests_per_minute=60))],
 )
 async def list_meeting_decisions(
-    meeting_id: int,
+    meeting_id: int = Path(..., ge=1, le=2_147_483_647, description="Positive integer meeting ID"),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> DecisionListResponse:
@@ -1417,8 +1615,8 @@ async def list_meeting_decisions(
     dependencies=[Depends(rate_limit(requests_per_minute=30))],
 )
 async def create_meeting_decision(
-    meeting_id: int,
     payload: DecisionCreate,
+    meeting_id: int = Path(..., ge=1, le=2_147_483_647, description="Positive integer meeting ID"),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> DecisionResponse:
@@ -1442,13 +1640,17 @@ async def create_meeting_decision(
     dependencies=[Depends(rate_limit(requests_per_minute=30))],
 )
 async def delete_meeting_decision(
-    meeting_id: int,
-    decision_id: int,
+    meeting_id: int = Path(..., ge=1, le=2_147_483_647, description="Positive integer meeting ID"),
+    decision_id: int = Path(..., ge=1, le=2_147_483_647, description="Positive integer decision ID"),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> dict[str, str]:
+    meeting = await get_meeting(db, meeting_id=meeting_id, user_id=current_user.id)
+    if not meeting:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Meeting not found")
     deleted = await delete_decision(db, decision_id=decision_id, user_id=current_user.id)
     if not deleted:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Decision not found")
     return {"status": "deleted", "decision_id": str(decision_id)}
+
 

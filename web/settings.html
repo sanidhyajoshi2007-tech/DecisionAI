@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Settings - DecisionAI</title>
+  <link rel="stylesheet" href="/web/styles.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+</head>
+<body>
+  <!-- Header -->
+  <header class="site-header">
+    <div class="header-container">
+      <a href="/web/index.html" class="brand-link">
+        <div class="brand-mark">DA</div>
+        <span class="brand-title">DecisionAI</span>
+      </a>
+      <div class="nav-actions">
+        <a href="/web/privacy.html" class="btn btn-secondary btn-sm">Privacy</a>
+        <button id="theme-toggle-btn" class="btn-icon" type="button" aria-label="Toggle Theme">
+          <svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor" aria-hidden="true">
+            <circle cx="8" cy="8" r="3"/>
+            <path d="M8 1v2M8 13v2M1 8h2M13 8h2M3 3l1.5 1.5M11.5 11.5L13 13M3 13l1.5-1.5M11.5 4.5L13 3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+          </svg>
+        </button>
+        <div id="user-profile-slot" style="display: flex; align-items: center; gap: var(--space-3);"></div>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Content -->
+  <main class="main-content">
+    <!-- Breadcrumb -->
+    <div style="margin-bottom: var(--space-4);">
+      <a href="/web/index.html" class="link-arrow" style="font-size: var(--text-sm); font-weight: 600; color: var(--text-secondary);">
+        <svg class="arrow-icon" style="transform: rotate(180deg);" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
+          <path d="M3 8h10M9 4l4 4-4 4"/>
+        </svg>
+        Back to Dashboard
+      </a>
+    </div>
+
+    <!-- Title and Subtitle -->
+    <div style="margin-bottom: var(--space-6);">
+      <h1 style="margin-bottom: var(--space-2);">Settings and Privacy Controls</h1>
+      <p style="color: var(--text-secondary); max-width: 720px;">
+        Manage your data retention preferences, automated cleanup schedules, and account deletion.
+      </p>
+    </div>
+
+    <div style="display: flex; flex-direction: column; gap: var(--space-6); max-width: 820px;">
+      <!-- Card 1: Data Retention Policy -->
+      <section class="bento-card" aria-labelledby="heading-retention">
+        <div class="bento-header">
+          <div>
+            <h2 id="heading-retention" class="bento-title">Data Retention Policy</h2>
+            <div class="bento-caption">Configure how long meeting audio, transcripts, and decisions are preserved</div>
+          </div>
+        </div>
+
+        <form id="retention-form" style="display: flex; flex-direction: column; gap: var(--space-4); margin-top: var(--space-3);">
+          <div style="display: flex; flex-direction: column; gap: var(--space-3);">
+            <label style="display: flex; align-items: center; gap: var(--space-3); cursor: pointer; padding: var(--space-3); background-color: var(--bg-surface-raised); border: 1px solid var(--border-subtle); border-radius: var(--radius-md);">
+              <input type="radio" name="retention_days" value="0" id="retention-forever" checked>
+              <div>
+                <div style="font-weight: 600; font-size: var(--text-sm); color: var(--text-primary);">Keep Forever (Default)</div>
+                <div style="font-size: var(--text-xs); color: var(--text-secondary);">Meetings and audio files remain saved until you delete them manually.</div>
+              </div>
+            </label>
+
+            <label style="display: flex; align-items: center; gap: var(--space-3); cursor: pointer; padding: var(--space-3); background-color: var(--bg-surface-raised); border: 1px solid var(--border-subtle); border-radius: var(--radius-md);">
+              <input type="radio" name="retention_days" value="30" id="retention-30">
+              <div>
+                <div style="font-weight: 600; font-size: var(--text-sm); color: var(--text-primary);">30 Days Retention</div>
+                <div style="font-size: var(--text-xs); color: var(--text-secondary);">Meetings older than 30 days are automatically deleted during the daily cleanup job.</div>
+              </div>
+            </label>
+
+            <label style="display: flex; align-items: center; gap: var(--space-3); cursor: pointer; padding: var(--space-3); background-color: var(--bg-surface-raised); border: 1px solid var(--border-subtle); border-radius: var(--radius-md);">
+              <input type="radio" name="retention_days" value="90" id="retention-90">
+              <div>
+                <div style="font-weight: 600; font-size: var(--text-sm); color: var(--text-primary);">90 Days Retention</div>
+                <div style="font-size: var(--text-xs); color: var(--text-secondary);">Meetings older than 90 days are automatically deleted during the daily cleanup job.</div>
+              </div>
+            </label>
+
+            <label style="display: flex; align-items: center; gap: var(--space-3); cursor: pointer; padding: var(--space-3); background-color: var(--bg-surface-raised); border: 1px solid var(--border-subtle); border-radius: var(--radius-md);">
+              <input type="radio" name="retention_days" value="365" id="retention-365">
+              <div>
+                <div style="font-weight: 600; font-size: var(--text-sm); color: var(--text-primary);">365 Days Retention</div>
+                <div style="font-size: var(--text-xs); color: var(--text-secondary);">Meetings older than 1 year are automatically deleted during the daily cleanup job.</div>
+              </div>
+            </label>
+          </div>
+
+          <div style="display: flex; align-items: center; gap: var(--space-3); margin-top: var(--space-2);">
+            <button type="submit" id="save-retention-btn" class="btn btn-primary">Save Retention Setting</button>
+            <button type="button" id="run-cleanup-btn" class="btn btn-secondary">Run Retention Cleanup Now</button>
+          </div>
+          <div id="retention-status" style="font-size: var(--text-xs); color: var(--text-secondary);"></div>
+        </form>
+      </section>
+
+      <!-- Card 2: Danger Zone: Delete All My Data -->
+      <section class="bento-card" style="border-color: var(--status-fail-border);" aria-labelledby="heading-danger-zone">
+        <div class="bento-header">
+          <div>
+            <h2 id="heading-danger-zone" class="bento-title" style="color: var(--status-fail-text);">Danger Zone: Delete All My Data</h2>
+            <div class="bento-caption">Permanently erase your account, audio files, and all meeting data</div>
+          </div>
+        </div>
+
+        <div style="display: flex; flex-direction: column; gap: var(--space-4); margin-top: var(--space-2);">
+          <div style="background-color: var(--status-fail-bg); border: 1px solid var(--status-fail-border); border-radius: var(--radius-md); padding: var(--space-4); color: var(--status-fail-text); font-size: var(--text-sm); line-height: 1.5;">
+            <div style="font-weight: 700; margin-bottom: var(--space-1);">Irreversible Action</div>
+            <div>
+              This will permanently delete all meetings, WAV audio recordings (both tab and microphone streams), transcripts, decisions, ChromaDB vector embeddings, audit logs, and your user account record.
+            </div>
+          </div>
+
+          <div style="display: flex; flex-direction: column; gap: var(--space-2);">
+            <label for="delete-confirm-input" style="font-size: var(--text-sm); font-weight: 600; color: var(--text-primary);">
+              Type <span style="font-family: var(--font-mono); color: var(--status-fail-text); font-weight: 700;">DELETE ALL MY DATA</span> to confirm:
+            </label>
+            <input type="text" id="delete-confirm-input" class="form-input" placeholder="DELETE ALL MY DATA" autocomplete="off" style="max-width: 360px;">
+          </div>
+
+          <div>
+            <button type="button" id="delete-all-btn" class="btn btn-sm" style="background-color: var(--accent-complement); color: var(--accent-complement-text); border: 1px solid var(--accent-complement-hover); cursor: not-allowed; opacity: 0.5;" disabled>
+              Permanently Delete All My Data
+            </button>
+          </div>
+          <div id="delete-status" style="font-size: var(--text-xs); color: var(--status-fail-text);"></div>
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <script src="/web/app.js"></script>
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      initSettingsPage();
+    });
+  </script>
+</body>
+</html>

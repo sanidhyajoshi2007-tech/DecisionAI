@@ -4,17 +4,43 @@ from fastapi import APIRouter, Depends, Query, Request, Response, status
 from fastapi.responses import JSONResponse, RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.auth import get_required_user
+from backend.auth import get_current_user, get_required_user
 from backend.config import Settings, get_settings
 from backend.crud.users import get_or_create_google_user
 from backend.database import get_db
+from backend.middleware.security import CSRF_COOKIE_NAME, generate_csrf_token
 from backend.models.user import User
 from backend.schemas.user import ExtensionTokenResponse, UserResponse
+from backend.services.audit import log_audit_event
 from backend.services.auth import create_extension_token, create_session_token
 from backend.services.oauth import exchange_google_code_for_user, get_google_auth_url
 from backend.services.rate_limiter import rate_limit
 
 router = APIRouter(prefix="/auth", tags=["auth"])
+
+
+# ── CSRF Token Endpoint ───────────────────────────────────
+
+@router.get(
+    "/csrf",
+    summary="Get CSRF token for the active session",
+)
+async def get_csrf_token(
+    request: Request,
+    response: Response,
+    settings: Settings = Depends(get_settings),
+) -> dict[str, str]:
+    """Issues or refreshes the CSRF double-submit cookie and returns token."""
+    token = request.cookies.get(CSRF_COOKIE_NAME) or generate_csrf_token()
+    response.set_cookie(
+        key=CSRF_COOKIE_NAME,
+        value=token,
+        httponly=False,
+        samesite="lax",
+        secure=settings.session_cookie_secure,
+        path="/",
+    )
+    return {"csrf_token": token}
 
 
 # ── Google OAuth Login ────────────────────────────────────
@@ -46,6 +72,7 @@ async def google_login(
     dependencies=[Depends(rate_limit(requests_per_minute=60))],
 )
 async def google_callback(
+    request: Request,
     code: str = Query(..., description="Google authorization code"),
     state: str | None = Query(None, description="OAuth state parameter"),
     json_response: bool = Query(False, description="Return JSON instead of redirecting to dashboard"),
@@ -64,6 +91,15 @@ async def google_callback(
         email=google_user["email"],
         name=google_user.get("name"),
         avatar_url=google_user.get("avatar_url"),
+    )
+
+    # Log audit event for login
+    await log_audit_event(
+        db=db,
+        action="login",
+        user_id=user.id,
+        target=f"user:{user.id}",
+        request=request,
     )
 
     # Generate 14-day signed session token
@@ -95,6 +131,19 @@ async def google_callback(
         secure=settings.session_cookie_secure,
         path="/",
     )
+
+    # Set CSRF double-submit cookie
+    csrf_token = generate_csrf_token()
+    resp.set_cookie(
+        key=CSRF_COOKIE_NAME,
+        value=csrf_token,
+        max_age=max_age,
+        httponly=False,
+        samesite="lax",
+        secure=settings.session_cookie_secure,
+        path="/",
+    )
+
     return resp
 
 
@@ -109,12 +158,28 @@ async def google_callback(
     include_in_schema=False,
 )
 async def logout(
+    request: Request,
     response: Response,
+    current_user: User | None = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
     settings: Settings = Depends(get_settings),
 ) -> dict[str, str]:
-    """Clears the session cookie from the browser client."""
+    """Clears session and CSRF cookies from the browser client and logs audit event."""
+    if current_user:
+        await log_audit_event(
+            db=db,
+            action="logout",
+            user_id=current_user.id,
+            target="session",
+            request=request,
+        )
+
     response.delete_cookie(
         key=settings.session_cookie_name,
+        path="/",
+    )
+    response.delete_cookie(
+        key=CSRF_COOKIE_NAME,
         path="/",
     )
     return {"status": "logged_out", "message": "Successfully logged out"}

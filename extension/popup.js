@@ -1,5 +1,5 @@
 /**
- * popup.js — DecisionAI Extension Popup Controller
+ * popup.js: DecisionAI Extension Popup Controller
  *
  * Controls recording lifecycle from the popup UI:
  * - Checks if the active browser tab is on meet.google.com
@@ -23,6 +23,8 @@ document.addEventListener("DOMContentLoaded", async () => {
   const micStatusCard = document.getElementById("micStatusCard");
   const micStatusText = document.getElementById("micStatusText");
   const enableMicBtn = document.getElementById("enableMicBtn");
+  const consentSection = document.getElementById("consentSection");
+  const consentCheckbox = document.getElementById("consentCheckbox");
 
   let timerInterval = null;
 
@@ -101,9 +103,23 @@ document.addEventListener("DOMContentLoaded", async () => {
     }
   });
 
+  // Consent checkbox listener
+  if (consentCheckbox) {
+    consentCheckbox.addEventListener("change", () => {
+      if (isMeetTab && !isRecording) {
+        startBtn.disabled = !consentCheckbox.checked;
+      }
+    });
+  }
+
   // 4. Start Recording Button
   startBtn.addEventListener("click", async () => {
     if (!isMeetTab) return;
+
+    if (!consentCheckbox || !consentCheckbox.checked) {
+      setStatus("Please confirm participant consent before recording.", true);
+      return;
+    }
 
     // Verify microphone permission first
     const isMicGranted = await checkMicPermission();
@@ -124,6 +140,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         tabId: tab.id,
         title: meetingTitle.value.trim() || "Google Meet Call",
         hasMicPermission: true,
+        consentRecorded: true,
       });
 
       if (!response || !response.success) {
@@ -181,6 +198,7 @@ document.addEventListener("DOMContentLoaded", async () => {
       tabNotice.classList.add("hidden");
       inputSection.classList.add("hidden");
       micStatusCard.classList.add("hidden");
+      if (consentSection) consentSection.classList.add("hidden");
       startBtn.classList.add("hidden");
       stopBtn.classList.remove("hidden");
       stopBtn.disabled = false;
@@ -212,6 +230,7 @@ document.addEventListener("DOMContentLoaded", async () => {
       stopBtn.classList.add("hidden");
       startBtn.classList.remove("hidden");
       inputSection.classList.remove("hidden");
+      if (consentSection) consentSection.classList.remove("hidden");
 
       if (onMeet) {
         // Active on Google Meet
@@ -219,12 +238,17 @@ document.addEventListener("DOMContentLoaded", async () => {
         tabNotice.classList.add("success");
         tabNotice.classList.remove("hidden");
         tabNotice.innerHTML = `
-          <div class="notice-icon">✅</div>
+          <div class="notice-icon">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+                <path d="M13.78 4.22a.75.75 0 0 1 0 1.06l-7.25 7.25a.75.75 0 0 1-1.06 0L2.22 9.28a.75.75 0 0 1 1.06-1.06L6 10.94l6.72-6.72a.75.75 0 0 1 1.06 0z"/>
+            </svg>
+          </div>
           <div class="notice-content">
               <p>Google Meet detected. Ready to record.</p>
           </div>
         `;
-        startBtn.disabled = false;
+        const hasConsent = Boolean(consentCheckbox && consentCheckbox.checked);
+        startBtn.disabled = !hasConsent;
         startBtn.innerHTML = `
           <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
               <circle cx="12" cy="12" r="9"/>
@@ -237,7 +261,11 @@ document.addEventListener("DOMContentLoaded", async () => {
         tabNotice.classList.add("warning");
         tabNotice.classList.remove("hidden");
         tabNotice.innerHTML = `
-          <div class="notice-icon">⚠️</div>
+          <div class="notice-icon">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+                <path d="M8 1a7 7 0 1 0 0 14A7 7 0 0 0 8 1zm0 3a.75.75 0 0 1 .75.75v3.5a.75.75 0 0 1-1.5 0v-3.5A.75.75 0 0 1 8 4zm0 8a1 1 0 1 1 0-2 1 1 0 0 1 0 2z"/>
+            </svg>
+          </div>
           <div class="notice-content">
               <p>Open or switch to a <strong>meet.google.com</strong> tab to start recording.</p>
           </div>

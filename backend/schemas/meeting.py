@@ -4,21 +4,22 @@ Pydantic schemas for Meeting and TranscriptSegment API requests/responses.
 
 from datetime import datetime
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from backend.models.meeting import MeetingStatus
 
 
-# ── Meeting ──────────────────────────────────────────────
+# -- Meeting ------------------------------------------------
 
 class MeetingCreate(BaseModel):
-    """Metadata sent along with the audio upload."""
-    title: str = "Untitled Meeting"
+    """Metadata sent along with meeting creation."""
+    title: str = Field(default="Untitled Meeting", min_length=1, max_length=200)
+    consent_recorded: bool = Field(default=False, description="Explicit recording consent from call participants")
 
 
 class MeetingUpdate(BaseModel):
     """Payload to update meeting details such as title."""
-    title: str
+    title: str = Field(..., min_length=1, max_length=200)
 
 
 class MeetingResponse(BaseModel):
@@ -33,6 +34,7 @@ class MeetingResponse(BaseModel):
     audio_path: str | None = None
     duration_seconds: float | None = None
     summary: str | None = None
+    consent_recorded: bool = False
     error_message: str | None = None
     created_at: datetime
     updated_at: datetime

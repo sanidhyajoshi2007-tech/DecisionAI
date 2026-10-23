@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Privacy and Data Practices - DecisionAI</title>
+  <link rel="stylesheet" href="/web/styles.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+</head>
+<body>
+  <!-- Header -->
+  <header class="site-header">
+    <div class="header-container">
+      <a href="/web/index.html" class="brand-link">
+        <div class="brand-mark">DA</div>
+        <span class="brand-title">DecisionAI</span>
+      </a>
+      <div class="nav-actions">
+        <a href="/web/settings.html" class="btn btn-secondary btn-sm">Settings</a>
+        <button id="theme-toggle-btn" class="btn-icon" type="button" aria-label="Toggle Theme">
+          <svg viewBox="0 0 16 16" width="16" height="16" fill="currentColor" aria-hidden="true">
+            <circle cx="8" cy="8" r="3"/>
+            <path d="M8 1v2M8 13v2M1 8h2M13 8h2M3 3l1.5 1.5M11.5 11.5L13 13M3 13l1.5-1.5M11.5 4.5L13 3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+          </svg>
+        </button>
+        <div id="user-profile-slot" style="display: flex; align-items: center; gap: var(--space-3);"></div>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Content -->
+  <main class="main-content">
+    <!-- Breadcrumb -->
+    <div style="margin-bottom: var(--space-4);">
+      <a href="/web/index.html" class="link-arrow" style="font-size: var(--text-sm); font-weight: 600; color: var(--text-secondary);">
+        <svg class="arrow-icon" style="transform: rotate(180deg);" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
+          <path d="M3 8h10M9 4l4 4-4 4"/>
+        </svg>
+        Back to Dashboard
+      </a>
+    </div>
+
+    <!-- Title and Subtitle -->
+    <div style="margin-bottom: var(--space-6);">
+      <h1 style="margin-bottom: var(--space-2);">Privacy Policy and Data Transparency</h1>
+      <p style="color: var(--text-secondary); max-width: 720px;">
+        A plain-language explanation of what audio we capture, where files are stored, which third-party APIs process your data, retention schedules, and complete data deletion.
+      </p>
+    </div>
+
+    <!-- Document Body -->
+    <div style="display: flex; flex-direction: column; gap: var(--space-6); max-width: 820px;">
+      <!-- Section 1: What is Recorded -->
+      <section class="bento-card">
+        <div class="bento-header">
+          <h2 class="bento-title">1. What is Recorded</h2>
+        </div>
+        <div style="display: flex; flex-direction: column; gap: var(--space-3); font-size: var(--text-sm); line-height: 1.6; color: var(--text-secondary);">
+          <p>
+            When you initiate a recording via the DecisionAI Chrome Extension, the application captures two separate audio channels:
+          </p>
+          <ul style="margin-left: var(--space-6); display: flex; flex-direction: column; gap: var(--space-2);">
+            <li><strong style="color: var(--text-primary);">Tab Audio (Participants):</strong> Audio played inside the active Google Meet tab, captured via the Chrome tabCapture API and routed to your headphones so call audio continues playing normally.</li>
+            <li><strong style="color: var(--text-primary);">Microphone Audio (Your Voice):</strong> Your local microphone input, captured via the Web Audio API.</li>
+          </ul>
+          <p>
+            Both audio streams are converted inside an AudioWorklet processor to single-channel 16 kHz 16-bit PCM WAV format. Video, screen sharing, webcam feeds, chat messages, and browser cookies are never captured.
+          </p>
+          <p>
+            <strong style="color: var(--text-primary);">Participant Consent:</strong> Before recording can begin, the extension requires you to confirm that all participants in the meeting have been informed and provided consent. This consent confirmation is recorded on the meeting record.
+          </p>
+        </div>
+      </section>
+
+      <!-- Section 2: Where Data is Stored -->
+      <section class="bento-card">
+        <div class="bento-header">
+          <h2 class="bento-title">2. Where Data is Stored</h2>
+        </div>
+        <div style="display: flex; flex-direction: column; gap: var(--space-3); font-size: var(--text-sm); line-height: 1.6; color: var(--text-secondary);">
+          <p>
+            All data collected by DecisionAI is kept strictly within your designated storage backend:
+          </p>
+          <ul style="margin-left: var(--space-6); display: flex; flex-direction: column; gap: var(--space-2);">
+            <li><strong style="color: var(--text-primary);">Audio WAV Files:</strong> Stored locally on the filesystem in the configured audio directory (default: audio_storage/) behind an abstracted StorageService interface that supports pluggable object storage.</li>
+            <li><strong style="color: var(--text-primary);">Relational Metadata and Transcripts:</strong> Meeting records, speaker turns, text transcripts, and extracted decisions are stored in a local SQLite database (decisionai.db).</li>
+            <li><strong style="color: var(--text-primary);">Vector Embeddings:</strong> 300 to 500 token speaker-turn transcript chunks are embedded into a local ChromaDB vector store (chroma_data/) to power the Ask AI semantic search.</li>
+            <li><strong style="color: var(--text-primary);">Audit Logs:</strong> Security and lifecycle events (meeting creation, deletion, renames, exports, and Ask AI queries) are recorded in the AuditLog table with timestamps and IP addresses. Transcript text and tokens are never logged.</li>
+          </ul>
+        </div>
+      </section>
+
+      <!-- Section 3: Third-Party Processors -->
+      <section class="bento-card">
+        <div class="bento-header">
+          <h2 class="bento-title">3. Third-Party Services Processing Your Data</h2>
+        </div>
+        <div style="display: flex; flex-direction: column; gap: var(--space-3); font-size: var(--text-sm); line-height: 1.6; color: var(--text-secondary);">
+          <p>
+            DecisionAI uses targeted AI services strictly to transcribe speech and extract meeting insights:
+          </p>
+          <ul style="margin-left: var(--space-6); display: flex; flex-direction: column; gap: var(--space-2);">
+            <li><strong style="color: var(--text-primary);">Speech-to-Text (STT) Provider:</strong> Audio chunks are submitted to your configured transcription provider: Google Gemini (gemini-2.5-flash via Google GenAI REST API), Sarvam AI (saaras:v4 for Indian accents/code-mixing), Deepgram (nova-3), or local faster-whisper (CTranslate2 offline inference with zero external network transmission).</li>
+            <li><strong style="color: var(--text-primary);">Google Gemini LLM:</strong> Chronologically merged transcripts are sent to Google Gemini to generate structured executive summaries, decisions, action items, and client requests, as well as to answer grounded Ask AI RAG queries.</li>
+          </ul>
+          <p>
+            We do not sell your data or use your confidential meetings to train public models. Audio and transcripts are transmitted to API providers over encrypted HTTPS/TLS connections only when processing is explicitly triggered.
+          </p>
+        </div>
+      </section>
+
+      <!-- Section 4: Data Retention Schedules -->
+      <section class="bento-card">
+        <div class="bento-header">
+          <h2 class="bento-title">4. Data Retention Schedules</h2>
+        </div>
+        <div style="display: flex; flex-direction: column; gap: var(--space-3); font-size: var(--text-sm); line-height: 1.6; color: var(--text-secondary);">
+          <p>
+            You have full control over data retention. In <a href="/web/settings.html" style="color: var(--accent-primary); font-weight: 600;">Settings</a>, you can select your preferred retention policy:
+          </p>
+          <ul style="margin-left: var(--space-6); display: flex; flex-direction: column; gap: var(--space-2);">
+            <li><strong style="color: var(--text-primary);">Keep Forever (Default):</strong> Data is preserved until you choose to delete it.</li>
+            <li><strong style="color: var(--text-primary);">30 Days:</strong> Recordings older than 30 days are automatically purged.</li>
+            <li><strong style="color: var(--text-primary);">90 Days:</strong> Recordings older than 90 days are automatically purged.</li>
+            <li><strong style="color: var(--text-primary);">365 Days:</strong> Recordings older than 1 year are automatically purged.</li>
+          </ul>
+          <p>
+            An automated daily cleanup job evaluates meeting start dates against your retention policy and purges expired meetings from SQLite, audio storage, and ChromaDB.
+          </p>
+        </div>
+      </section>
+
+      <!-- Section 5: How to Delete Your Data -->
+      <section class="bento-card">
+        <div class="bento-header">
+          <h2 class="bento-title">5. How to Delete Your Data</h2>
+        </div>
+        <div style="display: flex; flex-direction: column; gap: var(--space-3); font-size: var(--text-sm); line-height: 1.6; color: var(--text-secondary);">
+          <p>
+            You have the right to erase your data at any time:
+          </p>
+          <ul style="margin-left: var(--space-6); display: flex; flex-direction: column; gap: var(--space-2);">
+            <li><strong style="color: var(--text-primary);">Delete Single Meeting:</strong> On the dashboard or meeting viewer page, click the "Delete Meeting" button. This immediately and permanently deletes the meeting record, transcript segments, extracted decisions, audio WAV files on disk, and corresponding ChromaDB vector embeddings.</li>
+            <li><strong style="color: var(--text-primary);">Delete All My Data:</strong> In <a href="/web/settings.html" style="color: var(--status-fail-text); font-weight: 600;">Settings</a>, you can permanently erase your entire profile by typing the exact phrase <code>DELETE ALL MY DATA</code>. This synchronously purges all meetings, transcripts, decisions, audio files, ChromaDB vectors, audit logs, and your user record, immediately logging you out.</li>
+          </ul>
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <script src="/web/app.js"></script>
+  <script>
+    document.addEventListener('DOMContentLoaded', async () => {
+      initTheme();
+      const user = await API.fetchCurrentUser();
+      const userSlot = document.getElementById('user-profile-slot');
+      if (userSlot) {
+        if (user && user.email) {
+          userSlot.innerHTML = `
+            <span style="font-size: var(--text-xs); color: var(--text-secondary);">${user.name || user.email}</span>
+            <button id="logout-btn" class="btn btn-secondary btn-sm" type="button">Logout</button>
+          `;
+          document.getElementById('logout-btn')?.addEventListener('click', API.logout);
+        } else {
+          userSlot.innerHTML = `<a href="/web/login.html" class="btn btn-primary btn-sm">Login</a>`;
+        }
+      }
+    });
+  </script>
+</body>
+</html>
