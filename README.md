@@ -18,7 +18,6 @@ DecisionAI is an intelligent meeting assistant that captures dual-channel audio 
 10. [Repository Directory Structure](#repository-directory-structure)
 11. [Setup and Installation Guide](#setup-and-installation-guide)
 12. [Testing and Benchmarking](#testing-and-benchmarking)
-13. [License](#license)
 
 ---
 
@@ -582,9 +581,3 @@ Benchmark speech recognition accuracy on Hindi, English, and Hinglish ground tru
 ```bash
 python scripts/benchmark.py --demo
 ```
-
----
-
-## License
-
-This project is licensed under the MIT License. See the LICENSE file for details.
