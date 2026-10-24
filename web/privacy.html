@@ -46,7 +46,7 @@
     <div style="margin-bottom: var(--space-6);">
       <h1 style="margin-bottom: var(--space-2);">Privacy Policy and Data Transparency</h1>
       <p style="color: var(--text-secondary); max-width: 720px;">
-        A plain-language explanation of what audio we capture, where files are stored, which third-party APIs process your data, retention schedules, and complete data deletion.
+        A plain-language explanation of what audio we capture, where files are stored, which third-party services process your data, retention schedules, and complete data deletion.
       </p>
     </div>
 
@@ -62,11 +62,11 @@
             When you initiate a recording via the DecisionAI Chrome Extension, the application captures two separate audio channels:
           </p>
           <ul style="margin-left: var(--space-6); display: flex; flex-direction: column; gap: var(--space-2);">
-            <li><strong style="color: var(--text-primary);">Tab Audio (Participants):</strong> Audio played inside the active Google Meet tab, captured via the Chrome tabCapture API and routed to your headphones so call audio continues playing normally.</li>
-            <li><strong style="color: var(--text-primary);">Microphone Audio (Your Voice):</strong> Your local microphone input, captured via the Web Audio API.</li>
+            <li><strong style="color: var(--text-primary);">Call Audio (Participants):</strong> Audio played during the Google Meet call, routed so you can continue hearing the conversation through your speakers or headphones.</li>
+            <li><strong style="color: var(--text-primary);">Microphone Audio (Your Voice):</strong> Your spoken voice captured through your microphone.</li>
           </ul>
           <p>
-            Both audio streams are converted inside an AudioWorklet processor to single-channel 16 kHz 16-bit PCM WAV format. Video, screen sharing, webcam feeds, chat messages, and browser cookies are never captured.
+            Both audio streams are converted into clear voice recordings for transcription. Video, screen sharing, camera feeds, chat messages, and browser cookies are never captured.
           </p>
           <p>
             <strong style="color: var(--text-primary);">Participant Consent:</strong> Before recording can begin, the extension requires you to confirm that all participants in the meeting have been informed and provided consent. This consent confirmation is recorded on the meeting record.
@@ -81,13 +81,13 @@
         </div>
         <div style="display: flex; flex-direction: column; gap: var(--space-3); font-size: var(--text-sm); line-height: 1.6; color: var(--text-secondary);">
           <p>
-            All data collected by DecisionAI is kept strictly within your designated storage backend:
+            All data collected by DecisionAI is kept strictly within your designated secure storage:
           </p>
           <ul style="margin-left: var(--space-6); display: flex; flex-direction: column; gap: var(--space-2);">
-            <li><strong style="color: var(--text-primary);">Audio WAV Files:</strong> Stored locally on the filesystem in the configured audio directory (default: audio_storage/) behind an abstracted StorageService interface that supports pluggable object storage.</li>
-            <li><strong style="color: var(--text-primary);">Relational Metadata and Transcripts:</strong> Meeting records, speaker turns, text transcripts, and extracted decisions are stored in a local SQLite database (decisionai.db).</li>
-            <li><strong style="color: var(--text-primary);">Vector Embeddings:</strong> 300 to 500 token speaker-turn transcript chunks are embedded into a local ChromaDB vector store (chroma_data/) to power the Ask AI semantic search.</li>
-            <li><strong style="color: var(--text-primary);">Audit Logs:</strong> Security and lifecycle events (meeting creation, deletion, renames, exports, and Ask AI queries) are recorded in the AuditLog table with timestamps and IP addresses. Transcript text and tokens are never logged.</li>
+            <li><strong style="color: var(--text-primary);">Audio Recordings:</strong> Stored securely in your private application storage.</li>
+            <li><strong style="color: var(--text-primary);">Meeting Records and Transcripts:</strong> Meeting details, speaker dialogue, summaries, and extracted decisions are stored in your secure account data.</li>
+            <li><strong style="color: var(--text-primary);">Search Index:</strong> Processed meeting notes are indexed to enable conversational questions and answers in Ask AI.</li>
+            <li><strong style="color: var(--text-primary);">Activity History:</strong> Important account actions (such as sign-ins, meeting creation, and deletions) are recorded for your security. Spoken dialogue and confidential meeting content are never stored in activity logs.</li>
           </ul>
         </div>
       </section>
@@ -102,11 +102,11 @@
             DecisionAI uses targeted AI services strictly to transcribe speech and extract meeting insights:
           </p>
           <ul style="margin-left: var(--space-6); display: flex; flex-direction: column; gap: var(--space-2);">
-            <li><strong style="color: var(--text-primary);">Speech-to-Text (STT) Provider:</strong> Audio chunks are submitted to your configured transcription provider: Google Gemini (gemini-2.5-flash via Google GenAI REST API), Sarvam AI (saaras:v4 for Indian accents/code-mixing), Deepgram (nova-3), or local faster-whisper (CTranslate2 offline inference with zero external network transmission).</li>
-            <li><strong style="color: var(--text-primary);">Google Gemini LLM:</strong> Chronologically merged transcripts are sent to Google Gemini to generate structured executive summaries, decisions, action items, and client requests, as well as to answer grounded Ask AI RAG queries.</li>
+            <li><strong style="color: var(--text-primary);">Speech Recognition:</strong> Audio is submitted to your configured transcription engine (Google Gemini, Sarvam AI, Deepgram, or local offline processing) to convert spoken dialogue into text.</li>
+            <li><strong style="color: var(--text-primary);">Meeting Insights:</strong> Meeting transcripts are analyzed to generate executive summaries, action items, key decisions, and answers to your questions in Ask AI.</li>
           </ul>
           <p>
-            We do not sell your data or use your confidential meetings to train public models. Audio and transcripts are transmitted to API providers over encrypted HTTPS/TLS connections only when processing is explicitly triggered.
+            We do not sell your data or use your confidential meetings to train public models. Audio and transcripts are transmitted over encrypted, secure connections only when processing is explicitly triggered.
           </p>
         </div>
       </section>
@@ -127,7 +127,7 @@
             <li><strong style="color: var(--text-primary);">365 Days:</strong> Recordings older than 1 year are automatically purged.</li>
           </ul>
           <p>
-            An automated daily cleanup job evaluates meeting start dates against your retention policy and purges expired meetings from SQLite, audio storage, and ChromaDB.
+            An automated daily cleanup job evaluates meeting start dates against your retention policy and purges expired meetings, audio recordings, and search data.
           </p>
         </div>
       </section>
@@ -142,8 +142,8 @@
             You have the right to erase your data at any time:
           </p>
           <ul style="margin-left: var(--space-6); display: flex; flex-direction: column; gap: var(--space-2);">
-            <li><strong style="color: var(--text-primary);">Delete Single Meeting:</strong> On the dashboard or meeting viewer page, click the "Delete Meeting" button. This immediately and permanently deletes the meeting record, transcript segments, extracted decisions, audio WAV files on disk, and corresponding ChromaDB vector embeddings.</li>
-            <li><strong style="color: var(--text-primary);">Delete All My Data:</strong> In <a href="/web/settings.html" style="color: var(--status-fail-text); font-weight: 600;">Settings</a>, you can permanently erase your entire profile by typing the exact phrase <code>DELETE ALL MY DATA</code>. This synchronously purges all meetings, transcripts, decisions, audio files, ChromaDB vectors, audit logs, and your user record, immediately logging you out.</li>
+            <li><strong style="color: var(--text-primary);">Delete Single Meeting:</strong> On the dashboard or meeting viewer page, click the "Delete Meeting" button. This immediately and permanently deletes the meeting details, transcript, extracted decisions, audio recordings, and search index entries.</li>
+            <li><strong style="color: var(--text-primary);">Delete All My Data:</strong> In <a href="/web/settings.html" style="color: var(--status-fail-text); font-weight: 600;">Settings</a>, you can permanently erase your entire profile by typing the exact phrase <code>DELETE ALL MY DATA</code>. This completely removes all your meetings, transcripts, decisions, audio files, search data, activity history, and your user account, immediately signing you out.</li>
           </ul>
         </div>
       </section>
