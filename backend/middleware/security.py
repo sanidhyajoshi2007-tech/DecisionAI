@@ -111,6 +111,17 @@ class CSRFProtectionMiddleware(BaseHTTPMiddleware):
             # Bearer token is immune to CSRF because browsers do not attach it automatically
             return await call_next(request)
 
+        # Allow requests originating from Chrome Extension or live recording endpoints
+        origin = request.headers.get("origin", "")
+        client_header = request.headers.get("x-decisionai-client", "")
+        is_extension = origin.startswith("chrome-extension://") or client_header == "extension"
+        is_live_stream_endpoint = (
+            request.url.path == "/meetings"
+            or (request.url.path.startswith("/meetings/") and request.url.path.endswith("/finish"))
+        )
+        if is_extension or is_live_stream_endpoint:
+            return await call_next(request)
+
         # If request has a session cookie, enforce CSRF token check
         session_cookie = request.cookies.get(self.settings.session_cookie_name)
         if session_cookie:

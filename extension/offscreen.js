@@ -237,6 +237,9 @@ async function stopCapture() {
     try {
       await fetch(`http://localhost:8000/meetings/${currentMeetingId}/finish`, {
         method: "POST",
+        headers: {
+          "X-DecisionAI-Client": "extension",
+        },
         credentials: "include",
       });
     } catch (err) {

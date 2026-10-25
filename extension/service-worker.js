@@ -68,7 +68,10 @@ async function handleStartRecording(tabId, title, hasMicPermission, consentRecor
     // 2. Create meeting in backend scoped to authenticated user
     const createRes = await fetch(`${BACKEND_BASE}/meetings`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        "X-DecisionAI-Client": "extension",
+      },
       credentials: "include",
       body: JSON.stringify({
         title: title || "Google Meet Call",
@@ -77,7 +80,14 @@ async function handleStartRecording(tabId, title, hasMicPermission, consentRecor
     });
 
     if (!createRes.ok) {
-      throw new Error(`Backend returned status ${createRes.status}`);
+      let errDetail = `Backend returned status ${createRes.status}`;
+      try {
+        const errJson = await createRes.json();
+        if (errJson && errJson.detail) {
+          errDetail = errJson.detail;
+        }
+      } catch {}
+      throw new Error(errDetail);
     }
 
     const meetingData = await createRes.json();

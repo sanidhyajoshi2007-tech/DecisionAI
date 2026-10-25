@@ -595,5 +595,15 @@ async def test_csrf_protection_for_session_cookies(client: AsyncClient, setup_tw
     assert valid_res.status_code == 200
     assert valid_res.json()["title"] == "Legitimate User Meeting"
 
+    # 4. Chrome Extension live recording request with session cookie -> 200 OK (no CSRF token needed)
+    ext_res = await client.post(
+        "/meetings",
+        json={"title": "Extension Google Meet Call"},
+        headers={"X-DecisionAI-Client": "extension"},
+    )
+    assert ext_res.status_code == 200
+    assert ext_res.json()["title"] == "Extension Google Meet Call"
+
     # Clean up cookies
     client.cookies.clear()
+
