@@ -14,6 +14,7 @@ let tabWorklet = null;
 let micWorklet = null;
 let socket = null;
 let currentMeetingId = null;
+let currentStreamToken = null;
 let isRecording = false;
 const bufferQueue = [];
 let reconnectTimer = null;
@@ -24,7 +25,7 @@ const MIC_PREFIX = new Uint8Array([0x4d, 0x49, 0x43, 0x3a]);
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.type === "START_OFFSCREEN_CAPTURE") {
-    startCapture(message.streamId, message.meetingId, message.hasMicPermission)
+    startCapture(message.streamId, message.meetingId, message.hasMicPermission, message.streamToken)
       .then(() => sendResponse({ success: true }))
       .catch((err) => {
         console.error("Failed to start offscreen capture:", err);
@@ -44,8 +45,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 });
 
-async function startCapture(streamId, meetingId, hasMicPermission) {
+async function startCapture(streamId, meetingId, hasMicPermission, streamToken) {
   currentMeetingId = meetingId;
+  currentStreamToken = streamToken || null;
   isRecording = true;
   bufferQueue.length = 0;
 
@@ -144,11 +146,13 @@ async function startCapture(streamId, meetingId, hasMicPermission) {
 function connectWebSocket() {
   if (!isRecording || !currentMeetingId) return;
 
-  const wsUrl = `ws://localhost:8000/ws/meetings/${currentMeetingId}`;
+  const query = currentStreamToken ? `?token=${encodeURIComponent(currentStreamToken)}` : "";
+  const wsUrl = `ws://localhost:8000/ws/meetings/${currentMeetingId}${query}`;
   socket = new WebSocket(wsUrl);
   socket.binaryType = "arraybuffer";
 
   socket.onopen = () => {
+    console.log(`WebSocket connected for meeting ${currentMeetingId}`);
     // Flush buffered chunks
     while (bufferQueue.length > 0 && socket.readyState === WebSocket.OPEN) {
       const chunk = bufferQueue.shift();
@@ -156,7 +160,8 @@ function connectWebSocket() {
     }
   };
 
-  socket.onclose = () => {
+  socket.onclose = (event) => {
+    console.log(`WebSocket closed for meeting ${currentMeetingId} (code: ${event.code}, reason: ${event.reason || "none"})`);
     if (isRecording) {
       // Attempt reconnect after 1.5 seconds if still recording
       clearTimeout(reconnectTimer);
@@ -235,13 +240,22 @@ async function stopCapture() {
   // 5. Call backend finish endpoint
   if (currentMeetingId) {
     try {
-      await fetch(`http://localhost:8000/meetings/${currentMeetingId}/finish`, {
+      const finishHeaders = {
+        "X-DecisionAI-Client": "extension",
+      };
+      if (currentStreamToken) {
+        finishHeaders["Authorization"] = `Bearer ${currentStreamToken}`;
+      }
+      const finishRes = await fetch(`http://localhost:8000/meetings/${currentMeetingId}/finish`, {
         method: "POST",
-        headers: {
-          "X-DecisionAI-Client": "extension",
-        },
+        headers: finishHeaders,
         credentials: "include",
       });
+      if (!finishRes.ok) {
+        console.warn(`Finish endpoint returned status ${finishRes.status}`);
+      } else {
+        console.log(`Meeting ${currentMeetingId} finalized successfully.`);
+      }
     } catch (err) {
       console.warn("Failed to call finish endpoint:", err);
     }

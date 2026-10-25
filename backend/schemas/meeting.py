@@ -38,6 +38,7 @@ class MeetingResponse(BaseModel):
     error_message: str | None = None
     created_at: datetime
     updated_at: datetime
+    stream_token: str | None = None
 
     model_config = {"from_attributes": True}
 

@@ -57,7 +57,7 @@ from backend.services.audio_streamer import (
     parse_audio_chunk,
 )
 from backend.services.audit import log_audit_event
-from backend.services.auth import decode_token
+from backend.services.auth import create_extension_token, decode_token
 from backend.services.rag.vector_store import get_vector_store
 from backend.services.rate_limiter import rate_limit
 from backend.services.storage import (
@@ -115,7 +115,16 @@ async def create_new_meeting(
         request=request,
     )
 
-    return MeetingResponse.model_validate(meeting)
+    stream_token = create_extension_token(
+        user_id=current_user.id,
+        email=current_user.email,
+        secret_key=settings.secret_key,
+        expires_in_minutes=settings.extension_token_expire_minutes,
+    )
+
+    resp = MeetingResponse.model_validate(meeting)
+    resp.stream_token = stream_token
+    return resp
 
 
 
@@ -221,17 +230,19 @@ async def websocket_meeting_stream(
         except Exception:
             await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason="Invalid or expired token")
             return
-    elif settings.app_env == "development":
-        user_id = 1
-    else:
-        await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason="Authentication required")
-        return
 
     # Verify meeting ownership if meeting already exists in database
     async with async_session_maker() as db:
         meeting = await get_meeting_by_id(db, meeting_id)
-        if meeting and meeting.user_id != user_id:
-            await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason="Unauthorized meeting access")
+        if meeting:
+            if user_id is not None and meeting.user_id != user_id:
+                await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason="Unauthorized meeting access")
+                return
+            elif user_id is None and settings.app_env == "development":
+                # In local dev environment with Chrome extension, accept meeting's owner
+                user_id = meeting.user_id
+        elif user_id is None and settings.app_env != "development":
+            await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason="Authentication required")
             return
 
     await websocket.accept()
@@ -280,10 +291,13 @@ async def finish_meeting_recording(
     """
     meeting = await get_meeting_by_id(db, meeting_id)
     if meeting and meeting.user_id != current_user.id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Not authorized to finish this meeting",
-        )
+        if settings.app_env == "development" and current_user.id == 1:
+            logger.info("Allowing meeting %d finish in development mode for dev user fallback", meeting_id)
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Not authorized to finish this meeting",
+            )
 
     tab_path, mic_path, duration = finish_writer(meeting_id, settings)
 
@@ -303,8 +317,13 @@ async def finish_meeting_recording(
             "error": meeting.error_message,
         }
 
-    # Launch background transcription & LLM post-processing task if audio files exist
-    if duration > 0.0 or (tab_path.exists() and tab_path.stat().st_size > 44):
+    # Launch background transcription and LLM post-processing task if audio files exist
+    has_audio = (
+        duration > 0.0
+        or (tab_path.exists() and tab_path.stat().st_size > 44)
+        or (mic_path.exists() and mic_path.stat().st_size > 44)
+    )
+    if has_audio:
         meeting.status = MeetingStatus.PROCESSING
         meeting.duration_seconds = duration
         meeting.audio_path = f"{meeting_id}_tab.wav"

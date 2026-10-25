@@ -92,6 +92,7 @@ async function handleStartRecording(tabId, title, hasMicPermission, consentRecor
 
     const meetingData = await createRes.json();
     const meetingId = meetingData.id;
+    const streamToken = meetingData.stream_token || "";
 
     // 3. Get stream ID for the target Google Meet tab
     const streamId = await chrome.tabCapture.getMediaStreamId({ targetTabId: tabId });
@@ -111,6 +112,7 @@ async function handleStartRecording(tabId, title, hasMicPermission, consentRecor
       type: "START_OFFSCREEN_CAPTURE",
       streamId,
       meetingId,
+      streamToken,
       hasMicPermission,
     });
 
