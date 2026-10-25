@@ -68,11 +68,18 @@ class GeminiLLMProvider(LLMProvider):
     def _get_candidate_models(self) -> list[str]:
         """Order of Gemini models to attempt, falling back if rate limits occur."""
         preferred = [self.model]
-        candidates = ["gemini-3.5-flash", "gemini-flash-latest", "gemini-3.8-flash"]
+        candidates = [
+            "gemini-3.5-flash-lite",
+            "gemini-flash-lite-latest",
+            "gemini-3.1-flash-lite",
+            "gemini-3.5-flash",
+            "gemini-3.8-flash",
+        ]
         for c in candidates:
             if c not in preferred:
                 preferred.append(c)
         return preferred
+
 
     async def _call_gemini_with_backoff(self, prompt: str) -> dict[str, Any]:
         """

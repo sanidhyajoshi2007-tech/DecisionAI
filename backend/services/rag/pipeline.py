@@ -9,6 +9,7 @@ Orchestrates:
 Strict constraints: No emojis, no em dashes.
 """
 
+import asyncio
 import json
 import logging
 import re
@@ -26,7 +27,11 @@ from backend.providers.llm import get_llm_provider
 from backend.schemas.rag import AskResponse, Citation, DecisionItem
 from backend.services.rag.chunking import chunk_transcript_segments, format_timestamp_ms
 from backend.services.rag.hybrid_search import run_hybrid_search
-from backend.services.rag.intent import classify_query_intent, is_decision_query
+from backend.services.rag.intent import (
+    classify_query_intent,
+    is_advisory_query,
+    is_decision_query,
+)
 from backend.services.rag.vector_store import get_vector_store
 
 logger = logging.getLogger(__name__)
@@ -164,11 +169,17 @@ def build_rag_prompt(
 
     context_str = "\n\n".join(context_sections) if context_sections else "No relevant records found."
 
-    prompt = f"""You are DecisionAI, an executive AI meeting assistant.
+    prompt = f"""You are DecisionAI, an executive AI meeting assistant and intelligent thought partner.
 Answer the user's question directly, clearly, and conversationally, just like a helpful chatbot.
 
-RULES:
-1. Synthesize your answer in natural, fluent prose using ONLY the context provided below.
+GUIDING PRINCIPLES:
+1. FACTUAL RECALL vs ADVISORY INTELLIGENCE:
+   - For factual questions about what occurred in the meeting (e.g. decisions, who said what, deadlines, discussions):
+     Synthesize your answer clearly and accurately using the context provided below. If a factual inquiry asks about an event or topic completely unrelated to recorded meetings, state that it was not found in recorded meetings.
+   - For consultative, advisory, brainstorming, feedback, or value-add questions (e.g. 'what else can we add?', 'is anything missing?', 'give suggestions to improve', 'do you think this is scalable?', 'your thoughts or opinions'):
+     First understand the project, architecture, and goals discussed in the meeting context.
+     Then, USE YOUR INTELLECT, technical domain knowledge, and reasoning to offer high-value, actionable recommendations, architectural additions, and constructive suggestions tailored directly to the project discussed in the meeting.
+     Do NOT refuse or state 'not found in records' when the user is asking for your ideas, recommendations, or suggestions.
 2. DO NOT quote raw transcript lines, timestamps (e.g. [00:03]), or dump verbatim bracketed dialogue.
 3. DO NOT repeat the meeting title, date, or timestamps in your narrative response body; citation chips are automatically attached below the response.
 4. PARTICIPANT ATTRIBUTION:
@@ -176,7 +187,7 @@ RULES:
    - For general questions (such as 'what was this meeting about?', 'explain the project/architecture', 'what was discussed?'), synthesize the facts and concepts naturally without attributing every sentence to a speaker.
 5. If the transcript contains overlapping audio (e.g., microphone audio explaining a project alongside background tab audio), focus on the primary subject matter and answer the user's inquiry accurately.
 6. Support English, Hindi, and Hinglish dialogue naturally.
-7. If the answer cannot be determined from the recorded context, state directly that the topic was not found in recorded meetings.
+7. Strictly NO emojis and NO em dashes.
 
 CONTEXT:
 {context_str}
@@ -185,6 +196,7 @@ USER QUESTION:
 {question}
 """
     return prompt
+
 
 
 def generate_fallback_answer(
@@ -202,6 +214,7 @@ def generate_fallback_answer(
 
     q_lower = question.lower()
     asks_speaker = any(w in q_lower for w in ["who", "speaker", "participant", "kisne", "kisme"])
+    is_advisory = is_advisory_query(question)
 
     q_tokens = set(tokenize_for_bm25(question))
     stopwords = {"what", "was", "were", "the", "did", "we", "is", "are", "about", "for", "in", "to", "of", "and", "a", "an", "on", "with", "kya", "tha", "thi", "ke", "hai", "kaunsa", "ko", "kaise"}
@@ -240,8 +253,48 @@ def generate_fallback_answer(
     scored_chunks.sort(key=lambda x: x[0], reverse=True)
     matching_chunks = [c for score, c in scored_chunks if score > 0]
 
-    # Negative control check: if question has specific keywords and neither matching decisions nor chunks exist
+    # Negative control check vs advisory intelligence synthesis
     if content_tokens and not matching_decisions and not matching_chunks:
+        if is_advisory and (chunks or decisions):
+            full_context_text = " ".join(
+                [c.get("text", "") for c in chunks] + [d.get("text", "") for d in decisions]
+            ).lower()
+
+            suggestions = []
+            if any(w in full_context_text for w in ["chroma", "vector", "bm25", "rag", "search", "retrieval", "chunk"]):
+                suggestions.append(
+                    "Cross-Encoder Semantic Reranker: Add a secondary reranking step after Reciprocal Rank Fusion to re-order the top candidates, improving precision for complex queries."
+                )
+                suggestions.append(
+                    "Context-Aware Dynamic Turn Windowing: Group speaker turns flexibly by dialogue topic rather than fixed time windows before embedding into ChromaDB."
+                )
+            if any(w in full_context_text for w in ["audio", "capture", "tab", "mic", "pcm", "stream", "worklet", "websocket"]):
+                suggestions.append(
+                    "Real-Time Confidence Waveform and Live Preview: Display real-time audio volume visualizers and streaming partial transcript previews in the browser so users can verify audio capture fidelity."
+                )
+            if any(w in full_context_text for w in ["decision", "action item", "status", "deadline"]):
+                suggestions.append(
+                    "Automated Workflow Triggers: Sync approved action items directly to external productivity tools (such as Jira, GitHub, or Google Calendar) with automatic owner assignment and deadline notifications."
+                )
+            if any(w in full_context_text for w in ["speaker", "participant", "who"]):
+                suggestions.append(
+                    "Persistent Speaker Diarization Profiles: Maintain cross-meeting speaker voice embeddings so the assistant can recognize participants across calls and build personalized knowledge graphs."
+                )
+
+            if not suggestions:
+                suggestions = [
+                    "Proactive Meeting Summaries: Automatically generate executive bulleted summaries immediately following call completion.",
+                    "Semantic Action Item Tracking: Classify open questions versus confirmed deliverables with owner accountability.",
+                    "Interactive Cross-Meeting Search: Enable cross-meeting comparative queries to trace requirement changes over time.",
+                ]
+
+            response_lines = [
+                "Based on the meeting discussions and project architecture, here are valuable additions you can incorporate:",
+                *[f"- {s}" for s in suggestions[:4]],
+                "These enhancements elevate DecisionAI from a basic retrieval search tool into an active, proactive intelligence partner.",
+            ]
+            return "\n\n".join(response_lines)
+
         return f"No relevant meeting discussions or recorded decisions were found matching '{question}' in the recorded meetings archive."
 
     parts = []
@@ -407,30 +460,57 @@ async def execute_rag_query(
     )
 
     answer_text = ""
+    is_advisory = is_advisory_query(question)
     llm = get_llm_provider(settings=settings)
     if llm.is_available():
-        candidate_models = ["gemini-3.5-flash", "gemini-flash-latest"]
-        if llm.model not in candidate_models:
-            candidate_models.insert(0, llm.model)
+        candidate_models = [
+            llm.model,
+            "gemini-3.5-flash-lite",
+            "gemini-flash-lite-latest",
+            "gemini-3.1-flash-lite",
+            "gemini-3.5-flash",
+            "gemini-3.8-flash",
+        ]
+        seen_models = set()
+        candidate_models = [m for m in candidate_models if m and not (m in seen_models or seen_models.add(m))]
 
         for cand_model in candidate_models:
+            url = f"{llm.base_url}/models/{cand_model}:generateContent?key={llm.api_key}"
+            payload = {
+                "contents": [{"parts": [{"text": prompt}]}],
+                "generationConfig": {
+                    "temperature": 0.4 if is_advisory else 0.2,
+                },
+            }
             try:
-                url = f"{llm.base_url}/models/{cand_model}:generateContent?key={llm.api_key}"
-                payload = {
-                    "contents": [{"parts": [{"text": prompt}]}],
-                    "generationConfig": {"temperature": 0.2},
-                }
                 async with httpx.AsyncClient(timeout=20.0) as client:
-                    res = await client.post(url, json=payload)
-                    if res.status_code == 200:
-                        data = res.json()
-                        candidates = data.get("candidates", [])
-                        if candidates:
-                            parts = candidates[0].get("content", {}).get("parts", [])
-                            if parts and "text" in parts[0]:
-                                answer_text = parts[0]["text"].strip()
-                                if answer_text:
-                                    break
+                    for attempt in range(2):
+                        res = await client.post(url, json=payload)
+                        if res.status_code == 200:
+                            data = res.json()
+                            candidates = data.get("candidates", [])
+                            if candidates:
+                                parts = candidates[0].get("content", {}).get("parts", [])
+                                if parts and "text" in parts[0]:
+                                    answer_text = parts[0]["text"].strip()
+                                    if answer_text:
+                                        break
+                            break
+                        elif res.status_code in (429, 503):
+                            logger.warning(
+                                f"Gemini {cand_model} returned HTTP {res.status_code} (attempt {attempt + 1}). "
+                                "Retrying with backoff or falling back to next candidate model."
+                            )
+                            if attempt == 0:
+                                await asyncio.sleep(1.0)
+                                continue
+                            else:
+                                break
+                        else:
+                            logger.warning(f"Gemini {cand_model} returned HTTP {res.status_code}: {res.text[:120]}")
+                            break
+                if answer_text:
+                    break
             except Exception as e:
                 logger.warning(f"Gemini RAG call error on {cand_model}: {e}. Trying next candidate.")
 

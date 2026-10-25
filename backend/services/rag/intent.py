@@ -28,6 +28,20 @@ DECISION_PATTERNS = [
 
 COMPILED_PATTERNS = [re.compile(p, re.IGNORECASE) for p in DECISION_PATTERNS]
 
+# Patterns matching consultative, advisory, brainstorming, or value-add questions
+ADVISORY_PATTERNS = [
+    r"\b(suggest|suggestion|suggestions|recommend|recommendation|recommendations)\b",
+    r"\b(add\s+anything|anything\s+else|value\s+add|valuable|vaulable|add\s+more|something\s+else)\b",
+    r"\b(improve|improvement|how\s+to\s+improve|better\s+way)\b",
+    r"\b(missing|gaps?|risks?|critique|feedback)\b",
+    r"\b(what\s+do\s+you\s+think|do\s+u\s+think|do\s+you\s+think|your\s+thoughts|your\s+opinion)\b",
+    r"\b(scale|scaling|best\s+practices|future\s+scope|roadmap|enhancement|enhancements)\b",
+    # Hindi and Hinglish patterns
+    r"\b(kya\s+lagta\s+hai|kuch\s+aur\s+add|kya\s+behtar\s+kar\s+sakte|sujhaav)\b",
+]
+
+COMPILED_ADVISORY_PATTERNS = [re.compile(p, re.IGNORECASE) for p in ADVISORY_PATTERNS]
+
 
 def is_decision_query(query: str) -> bool:
     """
@@ -42,6 +56,19 @@ def is_decision_query(query: str) -> bool:
     return False
 
 
+def is_advisory_query(query: str) -> bool:
+    """
+    Classify whether a query is asking for suggestions, feedback, critique, or value additions.
+    """
+    if not query:
+        return False
+    cleaned = query.strip()
+    for pattern in COMPILED_ADVISORY_PATTERNS:
+        if pattern.search(cleaned):
+            return True
+    return False
+
+
 def classify_query_intent(query: str) -> str:
     """
     Returns classified intent label:
@@ -51,3 +78,4 @@ def classify_query_intent(query: str) -> str:
     if is_decision_query(query):
         return "decision_lookup"
     return "general_qa"
+

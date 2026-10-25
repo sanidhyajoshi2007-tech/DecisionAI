@@ -17,10 +17,15 @@ from backend.models.meeting import Meeting, MeetingStatus, TranscriptSegment
 from backend.models.user import User
 from backend.services.rag.chunking import TranscriptChunk, chunk_transcript_segments, estimate_tokens
 from backend.services.rag.hybrid_search import reciprocal_rank_fusion, run_hybrid_search, tokenize_for_bm25
-from backend.services.rag.intent import classify_query_intent, is_decision_query
+from backend.services.rag.intent import (
+    classify_query_intent,
+    is_advisory_query,
+    is_decision_query,
+)
 from backend.services.rag.pipeline import execute_rag_query, index_meeting_transcript
 from backend.services.rag.vector_store import ChromaVectorStore, MultilingualEmbeddingFunction
 from backend.services.auth import create_session_token
+
 
 
 def test_estimate_tokens():
@@ -169,6 +174,14 @@ def test_intent_classification():
     assert is_decision_query("Hello how are you?") is False
     assert is_decision_query("Tell me about the project timeline.") is False
     assert classify_query_intent("Who spoke in the first 5 minutes?") == "general_qa"
+
+    # Advisory and consultative queries
+    assert is_advisory_query("do u think we can add anything else vaulable to iit") is True
+    assert is_advisory_query("how can we improve this architecture?") is True
+    assert is_advisory_query("is there anything missing from our plan?") is True
+    assert is_advisory_query("kya isme kuch aur add kar sakte hain?") is True
+    assert is_advisory_query("What was the final decision?") is False
+
 
 
 @pytest.mark.asyncio
