@@ -5,6 +5,7 @@ Strict constraints: No emojis, no em dashes.
 """
 
 import hashlib
+import json
 import logging
 import math
 from typing import Any, Sequence
@@ -114,6 +115,7 @@ class ChromaVectorStore:
                 "start_ms": int(c.start_ms),
                 "end_ms": int(c.end_ms),
                 "chunk_index": int(c.chunk_index),
+                "participant_turns": json.dumps(getattr(c, "speaker_turns", [])),
             }
             for c in chunks
         ]

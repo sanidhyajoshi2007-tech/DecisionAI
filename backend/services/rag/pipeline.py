@@ -11,6 +11,7 @@ Strict constraints: No emojis, no em dashes.
 
 import json
 import logging
+import re
 from datetime import datetime
 from typing import Any, AsyncGenerator
 
@@ -137,7 +138,7 @@ def build_rag_prompt(
     chunks: list[dict[str, Any]],
 ) -> str:
     """
-    Construct prompt for the LLM containing retrieved context and citations instructions.
+    Construct prompt for the LLM containing retrieved context and conversational instructions.
     """
     context_sections = []
 
@@ -145,8 +146,7 @@ def build_rag_prompt(
         dec_lines = []
         for d in decisions:
             dec_lines.append(
-                f"- [{d['date']} | {d['meeting_title']} @ {d['timestamp']}] "
-                f"({d['type'].upper()} - Status: {d['status']}) {d['text']}"
+                f"- Recorded {d['type'].upper()} (Status: {d['status']}): {d['text']}"
             )
         context_sections.append("RECORDED DECISIONS AND ACTION ITEMS:\n" + "\n".join(dec_lines))
 
@@ -156,28 +156,33 @@ def build_rag_prompt(
             meta = c.get("metadata", {})
             title = meta.get("meeting_title", "Meeting")
             date_str = meta.get("date", "")
-            speakers = meta.get("speakers", "")
             chunk_lines.append(
-                f"--- Excerpt from '{title}' ({date_str}) [Speakers: {speakers}] ---\n"
+                f"--- Excerpt from '{title}' ({date_str}) ---\n"
                 f"{c.get('text', '')}"
             )
         context_sections.append("TRANSCRIPT DISCUSSION EXCERPTS:\n" + "\n\n".join(chunk_lines))
 
     context_str = "\n\n".join(context_sections) if context_sections else "No relevant records found."
 
-    prompt = f"""You are DecisionAI, an AI meeting intelligence assistant.
-Answer the user's question accurately using ONLY the context provided below.
-Support English, Hindi, and Hinglish dialogue.
-If the information is not in the context, state directly that the discussion or decision was not found in recorded meetings.
-Always include specific citations referencing the meeting title, date, and timestamp (MM:SS).
+    prompt = f"""You are DecisionAI, an executive AI meeting assistant.
+Answer the user's question directly, clearly, and conversationally, just like a helpful chatbot.
+
+RULES:
+1. Synthesize your answer in natural, fluent prose using ONLY the context provided below.
+2. DO NOT quote raw transcript lines, timestamps (e.g. [00:03]), or dump verbatim bracketed dialogue.
+3. DO NOT repeat the meeting title, date, or timestamps in your narrative response body; citation chips are automatically attached below the response.
+4. PARTICIPANT ATTRIBUTION:
+   - ONLY mention who said or proposed something if the user explicitly asks 'who said this', 'who mentioned', or asks about speakers/participants.
+   - For general questions (such as 'what was this meeting about?', 'explain the project/architecture', 'what was discussed?'), synthesize the facts and concepts naturally without attributing every sentence to a speaker.
+5. If the transcript contains overlapping audio (e.g., microphone audio explaining a project alongside background tab audio), focus on the primary subject matter and answer the user's inquiry accurately.
+6. Support English, Hindi, and Hinglish dialogue naturally.
+7. If the answer cannot be determined from the recorded context, state directly that the topic was not found in recorded meetings.
 
 CONTEXT:
 {context_str}
 
 USER QUESTION:
 {question}
-
-Provide a direct, helpful, and concise answer followed by reference citations.
 """
     return prompt
 
@@ -191,8 +196,12 @@ def generate_fallback_answer(
     """
     Deterministic synthesis for offline testing or when external LLM API is unavailable.
     Combines relevant decisions and hybrid transcript excerpts matching the query.
+    Synthesizes natural language responses instead of raw bracketed transcript dumps.
     """
     from backend.services.rag.hybrid_search import tokenize_for_bm25
+
+    q_lower = question.lower()
+    asks_speaker = any(w in q_lower for w in ["who", "speaker", "participant", "kisne", "kisme"])
 
     q_tokens = set(tokenize_for_bm25(question))
     stopwords = {"what", "was", "were", "the", "did", "we", "is", "are", "about", "for", "in", "to", "of", "and", "a", "an", "on", "with", "kya", "tha", "thi", "ke", "hai", "kaunsa", "ko", "kaise"}
@@ -237,51 +246,58 @@ def generate_fallback_answer(
 
     parts = []
 
-    # If matching decisions found, highlight the most relevant decision
+    # If matching decisions found, highlight the most relevant decision in natural language
     if matching_decisions:
         best_d = matching_decisions[0]
         parts.append(
-            f"The recorded {best_d['type']} was: \"{best_d['text']}\" "
-            f"(Status: {best_d['status']}), recorded in \"{best_d['meeting_title']}\" on {best_d['date']} at {best_d['timestamp']}."
+            f"The recorded {best_d['type']} was to {best_d['text']} (Status: {best_d['status']})."
         )
         if len(matching_decisions) > 1:
             more_items = [
-                f"• [{d['meeting_title']} @ {d['timestamp']}] {d['text']} ({d['status']})"
+                f"- {d['text']} (Status: {d['status']})"
                 for d in matching_decisions[1:3]
             ]
             parts.append("Additional related items:\n" + "\n".join(more_items))
     elif intent == "decision_lookup" and decisions:
         latest = decisions[0]
         parts.append(
-            f"The latest recorded {latest['type']} was: \"{latest['text']}\" "
-            f"(Status: {latest['status']}), recorded in \"{latest['meeting_title']}\" on {latest['date']} at {latest['timestamp']}."
+            f"The latest recorded {latest['type']} was: {latest['text']} (Status: {latest['status']})."
         )
 
     # Append dialogue context from matching or top chunks
     chunks_to_use = matching_chunks if matching_chunks else chunks
     if chunks_to_use:
         top_c = chunks_to_use[0]
-        meta = top_c.get("metadata", {})
-        title = meta.get("meeting_title", "Meeting")
-        date_str = meta.get("date", "")
-        time_str = format_timestamp_ms(meta.get("start_ms", 0))
-
         lines = [line.strip() for line in top_c.get("text", "").split("\n") if line.strip()]
         matched_lines = [
             l for l in lines
             if compute_overlap(content_tokens, set(tokenize_for_bm25(l))) > 0
         ]
         chosen_lines = matched_lines if matched_lines else lines[:3]
-        snippet_summary = " ".join(chosen_lines[:3])
 
-        if not matching_decisions or intent != "decision_lookup":
-            parts.append(
-                f"Based on the discussion in \"{title}\" ({date_str} at {time_str}): {snippet_summary}"
-            )
-        elif snippet_summary:
-            parts.append(
-                f"Discussion excerpt from \"{title}\" ({time_str}): {snippet_summary}"
-            )
+        cleaned_statements = []
+        for l in chosen_lines:
+            m = re.match(r"^\[\d{2}:\d{2}\]\s*(.*?):\s*(.*)$", l)
+            if m:
+                spk, speech = m.group(1), m.group(2).strip()
+                if asks_speaker:
+                    cleaned_statements.append(f"{spk} mentioned that {speech.rstrip('.')}.")
+                else:
+                    cleaned_statements.append(speech.rstrip("."))
+            else:
+                cleaned_text = re.sub(r"^\[\d{2}:\d{2}\]\s*", "", l).strip()
+                cleaned_statements.append(cleaned_text.rstrip("."))
+
+        if cleaned_statements:
+            if asks_speaker:
+                discussion_summary = " ".join(cleaned_statements)
+            else:
+                discussion_summary = ". ".join(cleaned_statements) + "."
+
+            if not matching_decisions or intent != "decision_lookup":
+                parts.append(f"Regarding this topic: {discussion_summary}")
+            elif discussion_summary:
+                parts.append(f"Context: {discussion_summary}")
 
     if not parts:
         return "No relevant meeting discussions or recorded decisions were found matching your question."
@@ -393,23 +409,30 @@ async def execute_rag_query(
     answer_text = ""
     llm = get_llm_provider(settings=settings)
     if llm.is_available():
-        try:
-            url = f"{llm.base_url}/models/{llm.model}:generateContent?key={llm.api_key}"
-            payload = {
-                "contents": [{"parts": [{"text": prompt}]}],
-                "generationConfig": {"temperature": 0.2},
-            }
-            async with httpx.AsyncClient(timeout=8.0) as client:
-                res = await client.post(url, json=payload)
-                if res.status_code == 200:
-                    data = res.json()
-                    candidates = data.get("candidates", [])
-                    if candidates:
-                        parts = candidates[0].get("content", {}).get("parts", [])
-                        if parts:
-                            answer_text = parts[0].get("text", "").strip()
-        except Exception as e:
-            logger.warning(f"Gemini RAG call error: {e}. Using fallback answer.")
+        candidate_models = ["gemini-3.5-flash", "gemini-flash-latest"]
+        if llm.model not in candidate_models:
+            candidate_models.insert(0, llm.model)
+
+        for cand_model in candidate_models:
+            try:
+                url = f"{llm.base_url}/models/{cand_model}:generateContent?key={llm.api_key}"
+                payload = {
+                    "contents": [{"parts": [{"text": prompt}]}],
+                    "generationConfig": {"temperature": 0.2},
+                }
+                async with httpx.AsyncClient(timeout=20.0) as client:
+                    res = await client.post(url, json=payload)
+                    if res.status_code == 200:
+                        data = res.json()
+                        candidates = data.get("candidates", [])
+                        if candidates:
+                            parts = candidates[0].get("content", {}).get("parts", [])
+                            if parts and "text" in parts[0]:
+                                answer_text = parts[0]["text"].strip()
+                                if answer_text:
+                                    break
+            except Exception as e:
+                logger.warning(f"Gemini RAG call error on {cand_model}: {e}. Trying next candidate.")
 
     if not answer_text:
         answer_text = generate_fallback_answer(

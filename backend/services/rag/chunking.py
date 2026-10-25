@@ -4,8 +4,8 @@ Chunks transcripts by speaker turns and time windows (300-500 tokens).
 Strict constraints: No emojis, no em dashes.
 """
 
-from dataclasses import dataclass
-from typing import Sequence
+from dataclasses import dataclass, field
+from typing import Any, Sequence
 
 
 @dataclass
@@ -21,6 +21,7 @@ class TranscriptChunk:
     chunk_index: int
     text: str
     token_count: int
+    speaker_turns: list[dict[str, Any]] = field(default_factory=list)
 
 
 def estimate_tokens(text: str) -> int:
@@ -68,13 +69,14 @@ def chunk_transcript_segments(
     chunks: list[TranscriptChunk] = []
     current_lines: list[str] = []
     current_speakers: set[str] = set()
+    current_turns: list[dict[str, Any]] = []
     current_start_ms: int = getattr(segments[0], "start_ms", 0)
     current_end_ms: int = getattr(segments[0], "end_ms", 0)
     current_tokens: int = 0
     chunk_index: int = 0
 
     def finalize_chunk():
-        nonlocal current_lines, current_speakers, current_start_ms, current_end_ms
+        nonlocal current_lines, current_speakers, current_turns, current_start_ms, current_end_ms
         nonlocal current_tokens, chunk_index
         if not current_lines:
             return
@@ -94,6 +96,7 @@ def chunk_transcript_segments(
             chunk_index=chunk_index,
             text=combined_text,
             token_count=current_tokens,
+            speaker_turns=list(current_turns),
         )
         chunks.append(chunk)
         chunk_index += 1
@@ -101,6 +104,7 @@ def chunk_transcript_segments(
         # Reset accumulator
         current_lines = []
         current_speakers = set()
+        current_turns = []
         current_tokens = 0
 
     for seg in segments:
@@ -125,6 +129,7 @@ def chunk_transcript_segments(
             # Split large segment into smaller pieces by sentences
             words = text.split(". ")
             sub_lines: list[str] = []
+            sub_turns: list[dict[str, Any]] = []
             sub_tokens: int = 0
             sub_start = start_ms
 
@@ -135,19 +140,23 @@ def chunk_transcript_segments(
                     # Emit sub chunk
                     current_lines = sub_lines
                     current_speakers = {speaker}
+                    current_turns = sub_turns
                     current_start_ms = sub_start
                     current_end_ms = end_ms
                     current_tokens = sub_tokens
                     finalize_chunk()
                     sub_lines = []
+                    sub_turns = []
                     sub_tokens = 0
                     sub_start = start_ms
                 sub_lines.append(part_line)
+                sub_turns.append({"speaker": speaker, "time": time_tag, "text": word_part, "start_ms": start_ms, "end_ms": end_ms})
                 sub_tokens += p_tokens
 
             if sub_lines:
                 current_lines = sub_lines
                 current_speakers = {speaker}
+                current_turns = sub_turns
                 current_start_ms = sub_start
                 current_end_ms = end_ms
                 current_tokens = sub_tokens
@@ -170,6 +179,7 @@ def chunk_transcript_segments(
 
         current_lines.append(line)
         current_speakers.add(speaker)
+        current_turns.append({"speaker": speaker, "time": time_tag, "text": text, "start_ms": start_ms, "end_ms": end_ms})
         current_end_ms = end_ms
         current_tokens += line_tokens
 

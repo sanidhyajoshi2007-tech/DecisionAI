@@ -178,15 +178,30 @@ class GeminiLLMProvider(LLMProvider):
         # Extract decisions, action items, and client requests
         extracted_items: list[ExtractedDecision] = []
         for s in segments:
-            text_lower = (s.get("text") or "").lower()
+            text = s.get("text") or ""
+            text_lower = text.lower()
             ts_ms = s.get("start_ms") or int(s.get("start_time", 0) * 1000)
 
-            # Decision pattern
-            if any(k in text_lower for k in ["decided", "decision", "agreed", "finalized", "chalega", "theek hai"]):
-                status = "rejected" if any(r in text_lower for r in ["reject", "cancel", "not doing", "drop", "nahi"]) else "accepted"
+            # Scrub project brand name so "DecisionAI" never triggers a false positive decision
+            clean_lower = re.sub(r'\bdecisionai\b', '', text_lower)
+
+            # Decision pattern: requires explicit decision verbs and context
+            decision_match = re.search(
+                r'\b(we decided|i decided|agreed upon|we agreed|finalized|theek hai|chalega|final decision)\b',
+                clean_lower,
+            )
+            if decision_match:
+                # Classify status based on explicit agreement or rejection
+                if any(r in clean_lower for r in ["reject", "cancel", "not doing", "drop", "nahi", "mana kiya", "opposed"]):
+                    status = "rejected"
+                elif any(a in clean_lower for a in ["agreed", "finalized", "approved", "confirmed", "chalega", "theek hai", "accepted"]):
+                    status = "accepted"
+                else:
+                    status = "pending"
+
                 extracted_items.append(
                     ExtractedDecision(
-                        text=s.get("text", ""),
+                        text=text.strip(),
                         type="decision",
                         status=status,
                         timestamp_ms=ts_ms,
@@ -194,11 +209,11 @@ class GeminiLLMProvider(LLMProvider):
                 )
 
             # Action item pattern
-            elif any(k in text_lower for k in ["will do", "action item", "todo", "take care", "dekh lunga", "send", "update"]):
-                status = "pending" if any(p in text_lower for p in ["pending", "review", "waiting"]) else "accepted"
+            elif re.search(r'\b(will do|action item|todo|take care of|dekh lunga|i will|we will|assigned to)\b', clean_lower):
+                status = "pending" if any(p in clean_lower for p in ["pending", "review", "waiting", "blocked"]) else "accepted"
                 extracted_items.append(
                     ExtractedDecision(
-                        text=s.get("text", ""),
+                        text=text.strip(),
                         type="action_item",
                         status=status,
                         timestamp_ms=ts_ms,
@@ -206,11 +221,11 @@ class GeminiLLMProvider(LLMProvider):
                 )
 
             # Client request pattern
-            elif any(k in text_lower for k in ["client", "customer", "requested", "asking for", "demand"]):
-                status = "accepted" if "accept" in text_lower else ("rejected" if "reject" in text_lower else "pending")
+            elif re.search(r'\b(client requested|customer asked|client wants|customer requested)\b', clean_lower):
+                status = "accepted" if "accept" in clean_lower else ("rejected" if "reject" in clean_lower else "pending")
                 extracted_items.append(
                     ExtractedDecision(
-                        text=s.get("text", ""),
+                        text=text.strip(),
                         type="client_request",
                         status=status,
                         timestamp_ms=ts_ms,
@@ -303,14 +318,16 @@ TASK 2: EXECUTIVE SUMMARY
 
 TASK 3: STRUCTURED EXTRACTION OF ITEMS
 - Extract distinct items categorized into one of these exact types:
-  - 'decision': A choice, agreement, or consensus reached by participants.
+  - 'decision': A concrete choice, agreement, or consensus explicitly made by participants during the meeting.
+    CRITICAL: General project explanations, architecture overviews, demonstrations, or status updates are NOT decisions. Do NOT extract descriptive sentences as decisions.
   - 'action_item': A concrete task assigned to an owner or team.
-  - 'client_request': An ask, feature request, or requirement raised by a client/customer.
-- Assign each item an exact status from these values:
-  - 'accepted': Approved, confirmed, or adopted.
-  - 'rejected': Explicitly declined, deprioritized, or dismissed.
-  - 'pending': Open, unresolved, deferred, or awaiting confirmation.
+  - 'client_request': An explicit ask, feature request, or requirement raised by a client/customer.
+- Assign each item an exact status based on explicit participant agreement:
+  - 'accepted': Participants explicitly approved, confirmed, or agreed upon the item during the call.
+  - 'rejected': Participants explicitly declined, opposed, or dropped the item.
+  - 'pending': An idea, suggestion, or task proposed without final consensus or formal agreement.
 - Reference the exact 'timestamp_ms' from the transcript segment where this item was discussed.
+- If no actual decisions or action items were made during the meeting (such as in an informational presentation or product overview), return an empty array [] for decisions. Never invent decisions.
 
 Meeting Title: {title}
 
