@@ -54,7 +54,7 @@ class GeminiLLMProvider(LLMProvider):
 
     @property
     def model(self) -> str:
-        return self.settings.gemini_model or "gemini-3.8-flash"
+        return self.settings.gemini_model or "gemini-3.5-flash"
 
     def is_available(self) -> bool:
         """Check if a valid GEMINI_API_KEY is configured."""
@@ -68,7 +68,7 @@ class GeminiLLMProvider(LLMProvider):
     def _get_candidate_models(self) -> list[str]:
         """Order of Gemini models to attempt, falling back if rate limits occur."""
         preferred = [self.model]
-        candidates = ["gemini-3.8-flash", "gemini-flash-latest", "gemini-3.5-flash"]
+        candidates = ["gemini-3.5-flash", "gemini-flash-latest", "gemini-3.8-flash"]
         for c in candidates:
             if c not in preferred:
                 preferred.append(c)
@@ -94,7 +94,7 @@ class GeminiLLMProvider(LLMProvider):
         candidate_models = self._get_candidate_models()
         last_error = None
 
-        async with httpx.AsyncClient(timeout=45.0) as client:
+        async with httpx.AsyncClient(timeout=15.0) as client:
             for candidate_model in candidate_models:
                 url = f"{self.base_url}/models/{candidate_model}:generateContent?key={self.api_key}"
 

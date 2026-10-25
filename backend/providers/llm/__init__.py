@@ -28,6 +28,9 @@ def get_llm_provider(
     Factory function to retrieve configured LLM provider instance.
     Defaults to Gemini.
     """
+    if isinstance(provider_name, Settings):
+        settings = provider_name
+        provider_name = None
     settings = settings or get_settings()
     name = (provider_name or getattr(settings, "llm_provider", "gemini")).lower().strip()
 

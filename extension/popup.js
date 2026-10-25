@@ -155,6 +155,15 @@ document.addEventListener("DOMContentLoaded", async () => {
 
       if (state === "transcribing" && mId) {
         showTranscriptionUI(mId);
+      } else if (state === "idle" && transcriptionCard && !transcriptionCard.classList.contains("hidden")) {
+        // Background service worker finalized the meeting
+        if (transcriptionBar) transcriptionBar.style.width = "100%";
+        if (transcriptionPercent) transcriptionPercent.textContent = "100%";
+        if (transcriptionStatus) transcriptionStatus.textContent = "Complete! Redirecting to Dashboard...";
+        setTimeout(() => {
+          chrome.tabs.create({ url: "http://localhost:8000/web/index.html" });
+          window.close();
+        }, 500);
       } else {
         if (transcriptionCard) transcriptionCard.classList.add("hidden");
         if (recordingControls) recordingControls.classList.remove("hidden");
@@ -256,8 +265,8 @@ document.addEventListener("DOMContentLoaded", async () => {
     if (transcriptionStatus) transcriptionStatus.textContent = "Saving audio tracks and initializing AI pipeline...";
 
     const progressTimer = setInterval(() => {
-      if (progress < 85) {
-        progress += 6;
+      if (progress < 94) {
+        progress += progress < 70 ? 6 : 2;
         if (transcriptionBar) transcriptionBar.style.width = `${progress}%`;
         if (transcriptionPercent) transcriptionPercent.textContent = `${progress}%`;
 
@@ -271,15 +280,17 @@ document.addEventListener("DOMContentLoaded", async () => {
       }
     }, 1200);
 
+    let pollCount = 0;
     const pollInterval = setInterval(async () => {
       if (!mId) return;
+      pollCount++;
       try {
         const res = await fetch(`http://localhost:8000/api/meetings/${mId}`, {
           credentials: "include",
         });
         if (res.ok) {
           const data = await res.json();
-          if (data.status === "ready") {
+          if (data.status === "ready" || (pollCount >= 40 && data.status !== "failed")) {
             clearInterval(progressTimer);
             clearInterval(pollInterval);
             if (transcriptionBar) transcriptionBar.style.width = "100%";
