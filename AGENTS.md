@@ -96,6 +96,10 @@ DecisionAI features a pluggable, multi-provider transcription pipeline in `backe
 - Segments from both channels are chronologically sorted and merged by `start_ms`.
 - Each segment stores: `meeting_id`, `speaker` ("You (Mic)" vs "Participant (Tab)"), `start_ms`, `end_ms`, `start_time`, `end_time`, `text`, `raw_text`, and `language`.
 
+### Digital Silence Gating & Anti-Hallucination
+- `is_silent_wav`: Calculates Root-Mean-Square (RMS) amplitude on raw audio buffers. If a channel contains pure digital silence (e.g. solo calls where no other tab participants exist), transcription is immediately skipped with 0 hallucination.
+- Prompt suppression: Multimodal Gemini models are instructed to return empty text on silence/noise instead of hallucinating historical or literary text.
+
 ### Hindi & Hinglish Benchmarking
 - `scripts/benchmark.py`: Evaluates providers against human-corrected ground truth transcripts.
 - Performs Unicode NFC normalization, nukta/danda cleanup for Devanagari Hindi, and phonetic equivalence token mappings for Hinglish.
@@ -106,7 +110,7 @@ DecisionAI features a pluggable, multi-provider transcription pipeline in `backe
 
 ## Retrieval-Augmented Generation (RAG) Architecture
 
-DecisionAI features an intelligent RAG pipeline in `backend/services/rag/`:
+DecisionAI features an intelligent thought-partner RAG pipeline in `backend/services/rag/`:
 
 ### 1. Speaker-Turn Chunking & ChromaDB
 - Transcripts are grouped by speaker turns and time windows into 300 to 500 token chunks.
@@ -115,10 +119,12 @@ DecisionAI features an intelligent RAG pipeline in `backend/services/rag/`:
 - Local multilingual embeddings utilize `paraphrase-multilingual-MiniLM-L12-v2` with deterministic offline fallback.
 - Multi-tenant data isolation strictly enforces `user_id` filtering on every vector query.
 
-### 2. Intent Classification & SQL Decision Lookup
-- Queries are classified into `decision_lookup` and `general_qa`.
-- Questions regarding final decisions, action items, or conclusions query the SQL `Decision` table sorted by date.
-- Scoped to the authenticated `user_id` and optional `meeting_id`.
+### 2. Intent Classification, Thought Partnering & SQL Routing
+- Queries are classified into:
+  - `decision_lookup`: SQL Decision table lookup sorted by date.
+  - `advisory`: Consultative queries seeking suggestions, recommendations, or architecture additions (`is_advisory_query`). Functions as an active thought partner, synthesizing project context and applying technical reasoning to deliver actionable recommendations.
+  - `general_qa`: Factual meeting dialogue questions routed through hybrid search.
+- Multi-Model Cascading: Resilient fallback across `gemini-3.5-flash-lite`, `gemini-flash-lite-latest`, `gemini-3.1-flash-lite`, and `gemini-3.5-flash` with exponential backoff on HTTP 429/503.
 
 ### 3. Hybrid Search (Vector + BM25)
 - Vector similarity search retrieves semantic matches from ChromaDB.
@@ -129,6 +135,7 @@ DecisionAI features an intelligent RAG pipeline in `backend/services/rag/`:
 - Answers cite specific meeting titles, dates, and MM:SS timestamps.
 - Streaming responses delivered via Server-Sent Events (`POST /api/ask?stream=true`).
 - Clicking a citation chip in the Ask AI chat navigates to the meeting player, seeks both audio channels, and highlights the dialogue segment.
+
 
 ---
 

@@ -151,6 +151,11 @@ DecisionAI incorporates a pluggable, multi-provider transcription pipeline locat
 - Error Rate Calculation: Computes Word Error Rate (WER) using Levenshtein distance and outputs structured comparison tables.
 - Run benchmark: `python scripts/benchmark.py --demo`
 
+### Digital Silence Detection and Anti-Hallucination
+
+- Pre-Flight RMS Energy Gating: When users record solo meetings (no other participants in Google Meet), the participant tab capture channel contains pure digital silence. The pipeline uses `is_silent_wav` with a Root-Mean-Square (RMS) amplitude threshold to detect silence and bypass STT processing immediately.
+- Silence Suppression Prompting: Multimodal models are instructed to return empty transcripts if an audio segment lacks intelligible speech, preventing phantom historical or literary hallucinations on silent audio buffers.
+
 ---
 
 ## Meeting Intelligence and Extraction
@@ -167,7 +172,7 @@ Following transcription, an asynchronous background task invokes Google Gemini t
 
 ## Retrieval-Augmented Generation (RAG) Architecture
 
-DecisionAI features a hybrid RAG pipeline located in `backend/services/rag/`:
+DecisionAI features an intelligent thought-partner RAG pipeline located in `backend/services/rag/`:
 
 ### 1. Speaker-Turn Chunking and ChromaDB Storage
 - Chunk Boundaries: Transcripts are grouped by speaker turns and time windows into 300 to 500 token chunks. Long monologues are partitioned at sentence boundaries. Pauses exceeding 45 seconds force a chunk break.
@@ -175,20 +180,27 @@ DecisionAI features a hybrid RAG pipeline located in `backend/services/rag/`:
 - Metadata Indexing: Each chunk indexes `user_id`, `meeting_id`, `date`, `speakers`, and `start_ms`.
 - Strict Multi-Tenant Isolation: Every ChromaDB vector query enforces a mandatory `user_id` metadata filter.
 
-### 2. Intent Classification and SQL Routing
-- Queries are classified into two execution paths:
+### 2. Intent Classification, Thought Partnering, and SQL Routing
+- Queries are classified into two primary execution paths with specialized intelligence modes:
   1. `decision_lookup`: Queries asking about final decisions, conclusions, or assigned tasks route directly to the relational `Decision` table sorted by date.
-  2. `general_qa`: Broad contextual questions route through the hybrid search engine.
+  2. `advisory` (Thought Partner): Consultative queries asking for ideas, architectural recommendations, missing components, critiques, or value additions (`is_advisory_query`). Rather than acting as a static retrieval database that quits when a verbatim match is missing, DecisionAI acts as an intelligent co-pilot, synthesizing project context and applying technical reasoning to deliver actionable suggestions.
+  3. `general_qa`: Factual contextual queries route through the hybrid search engine, returning grounded facts with exact audio citations.
 
-### 3. Hybrid Search (Dense Vector + Sparse BM25)
+### 3. Multi-Model Resilience and Rate Limit Backoff
+- Candidate Model Cascading: Queries attempt primary models with automatic cascading across `gemini-3.5-flash-lite`, `gemini-flash-lite-latest`, `gemini-3.1-flash-lite`, and `gemini-3.5-flash`.
+- Rate Limit Resilience: Implements exponential backoff retry for HTTP 429 and 503 responses before falling back to alternative flash models.
+- Intelligent Fallback Synthesis: When offline or when external APIs are unavailable, the fallback engine analyzes transcript topics and synthesizes concrete architectural enhancements rather than rejecting the query.
+
+### 4. Hybrid Search (Dense Vector + Sparse BM25)
 - Dense Retrieval: Semantic similarity queries against ChromaDB embeddings.
 - Sparse Retrieval: In-memory BM25 index supporting English, Devanagari Hindi, and romanized Hinglish tokens.
 - Reciprocal Rank Fusion: Results are combined using Reciprocal Rank Fusion (RRF with k=60) to score dense and sparse matches fairly.
 
-### 4. Grounded Citations and Interactive Audio Seeking
-- Answer Generation: Google Gemini synthesizes grounded answers containing explicit citations (Meeting Title, Date, MM:SS).
+### 5. Grounded Citations and Interactive Audio Seeking
+- Answer Generation: Google Gemini synthesizes answers containing explicit citations (Meeting Title, Date, MM:SS).
 - Interactive Citations: In the Ask AI chat interface, clicking any citation chip navigates to the meeting player, seeks both tab and microphone audio to the exact second, and highlights the corresponding transcript block.
 - Streaming Responses: Answers stream token-by-token over Server-Sent Events (`POST /api/ask?stream=true`).
+
 
 ---
 
