@@ -77,6 +77,12 @@ class GeminiTranscriptionProvider(TranscriptionProvider):
         if not audio_path.exists():
             raise FileNotFoundError(f"Audio file not found: {audio_path}")
 
+        # Import silence detector
+        from backend.services.stt.pipeline import is_silent_wav
+        if is_silent_wav(audio_path):
+            logger.info(f"Skipping Gemini STT for '{audio_path.name}': channel is silent.")
+            return TranscriptionResult(segments=[], language=language or "en")
+
         if not self.is_available():
             raise RuntimeError(
                 "GEMINI_API_KEY is not set or invalid in .env file. "
@@ -124,9 +130,11 @@ class GeminiTranscriptionProvider(TranscriptionProvider):
             "  ]\n"
             "}\n"
             "Rules:\n"
-            "1. start_ms and end_ms must be integer millisecond offsets relative to the start of this audio clip.\n"
-            "2. If speakers code-switch between Hindi and English, capture the words accurately.\n"
-            "3. Return ONLY the JSON object. Do not wrap in markdown or explanation."
+            "1. If the audio is silent, background hiss, or contains no discernible human speech, return an empty segments array: {\"detected_language\": \"en\", \"segments\": []}.\n"
+            "2. DO NOT hallucinate, guess, or invent speech that was not spoken in the audio.\n"
+            "3. start_ms and end_ms must be integer millisecond offsets relative to the start of this audio clip.\n"
+            "4. If speakers code-switch between Hindi and English, capture the words accurately.\n"
+            "5. Return ONLY the JSON object. Do not wrap in markdown or explanation."
         )
 
         models_to_try = [self.model]

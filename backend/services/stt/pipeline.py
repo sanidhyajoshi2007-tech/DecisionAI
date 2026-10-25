@@ -35,6 +35,8 @@ from backend.services.stt.base import (
 logger = logging.getLogger(__name__)
 
 
+import struct
+
 def is_valid_wav(path: Path) -> bool:
     """Check if file exists and has audio frames beyond the 44-byte WAV header."""
     if not path or not path.exists():
@@ -44,6 +46,35 @@ def is_valid_wav(path: Path) -> bool:
     try:
         with wave.open(str(path), "rb") as wf:
             return wf.getnframes() > 0
+    except Exception:
+        return False
+
+
+def is_silent_wav(path: Path, min_rms: float = 20.0) -> bool:
+    """
+    Check if a WAV file is pure silence or near-zero background energy.
+    Prevents STT models (Gemini, Whisper) from hallucinating text on silent channels
+    when only one participant is present in a call.
+    """
+    if not path or not path.exists() or path.stat().st_size <= 44:
+        return True
+    try:
+        with wave.open(str(path), "rb") as wf:
+            n_frames = wf.getnframes()
+            if n_frames == 0:
+                return True
+            sampwidth = wf.getsampwidth()
+            if sampwidth != 2:
+                return False
+            # Read up to 5 seconds of audio to measure RMS energy
+            max_read = min(n_frames, 16000 * 5)
+            frames_data = wf.readframes(max_read)
+            if not frames_data:
+                return True
+            num_samples = len(frames_data) // 2
+            samples = struct.unpack(f"<{num_samples}h", frames_data)
+            rms = (sum(s * s for s in samples) / num_samples) ** 0.5
+            return rms < min_rms
     except Exception:
         return False
 
