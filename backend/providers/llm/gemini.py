@@ -8,7 +8,7 @@ Handles:
    (accepted/rejected/pending) and timestamp references.
 4. Handling Hindi, English, and conversational Hinglish code-switching.
 5. Robust retry and exponential backoff for free-tier rate limits (HTTP 429, 503).
-6. Model fallbacks (gemini-2.5-flash, gemini-2.0-flash, gemini-1.5-flash).
+6. Model fallbacks (gemini-3.8-flash, gemini-flash-latest, gemini-3.5-flash).
 7. Validation of structured outputs using Pydantic.
 """
 

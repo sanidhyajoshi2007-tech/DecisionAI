@@ -1,6 +1,6 @@
 """
 Google Gemini Audio Transcription Provider.
-Supports Gemini 2.0 Flash / 2.5 Flash / 1.5 Flash and Gemini 3.5 Transcribe.
+Supports Gemini 3.8 Flash, Gemini 3.5 Flash, and Gemini 2.5 Flash.
 """
 
 import base64
@@ -39,7 +39,7 @@ class GeminiTranscriptionProvider(TranscriptionProvider):
 
     @property
     def model(self) -> str:
-        return self.settings.gemini_transcription_model or "gemini-2.0-flash"
+        return self.settings.gemini_transcription_model or "gemini-3.8-flash"
 
     @property
     def name(self) -> str:
