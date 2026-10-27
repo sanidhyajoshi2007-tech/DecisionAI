@@ -14,6 +14,7 @@ from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from backend.config import get_settings
@@ -87,6 +88,23 @@ app.include_router(auth_router)
 app.include_router(meetings_router)
 app.include_router(rag_router)
 app.include_router(users_router)
+
+
+@app.get("/api/extension/download", tags=["system"])
+async def download_extension_zip():
+    """
+    Direct download endpoint for the packaged Chrome extension ZIP.
+    Allows users and collaborators to download the extension directly.
+    """
+    dist_zip = Path(__file__).parent.parent / "dist" / "decisionai-chrome-extension.zip"
+    if not dist_zip.exists():
+        from scripts.package_extension import package_extension
+        package_extension()
+    return FileResponse(
+        path=str(dist_zip),
+        filename="decisionai-chrome-extension.zip",
+        media_type="application/zip",
+    )
 
 
 # ── Static Files (Frontend) ─────────────────────────────
