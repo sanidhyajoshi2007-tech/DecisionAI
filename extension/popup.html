@@ -31,20 +31,30 @@
 
         <!-- User Account Bar (Shown when authenticated) -->
         <div id="accountCard" class="account-card hidden">
-            <span id="accountEmail" class="account-email">user@example.com</span>
-            <span class="account-badge">Signed In</span>
+            <div style="display: flex; align-items: center; justify-content: space-between; width: 100%;">
+                <div>
+                    <span id="accountEmail" class="account-email">user@example.com</span>
+                    <span class="account-badge">Signed In</span>
+                </div>
+                <button id="logoutBtn" type="button" style="background: none; border: none; font-size: 10px; color: #94a3b8; cursor: pointer; text-decoration: underline;">Switch</button>
+            </div>
         </div>
 
         <!-- Login Required Card (Shown when not authenticated) -->
         <div id="loginGateCard" class="login-gate-card">
             <div class="login-gate-title">Sign In Required</div>
-            <p class="login-gate-desc">Please log in to your personal DecisionAI account before recording to store meeting audios and transcripts.</p>
-            <button id="openLoginBtn" class="btn-login" type="button">
-                <span>Sign In to DecisionAI</span>
-                <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
-                    <path d="M3 8h10M9 4l4 4-4 4"/>
-                </svg>
-            </button>
+            <p class="login-gate-desc">Enter your email to sign in directly to your connected DecisionAI server:</p>
+            <div style="display: flex; flex-direction: column; gap: 8px; margin-top: 10px;">
+                <input type="email" id="quickEmailInput" placeholder="name@example.com" style="width: 100%; box-sizing: border-box; padding: 7px 10px; font-size: 12px; background: #0f172a; border: 1px solid #334155; border-radius: 6px; color: #f1f5f9;">
+                <button id="quickLoginBtn" class="btn-login" type="button" style="width: 100%; justify-content: center;">
+                    <span>Sign In</span>
+                </button>
+            </div>
+            <div style="margin-top: 10px; text-align: center;">
+                <button id="openLoginBtn" type="button" style="background: none; border: none; font-size: 11px; color: #60a5fa; cursor: pointer; text-decoration: underline;">
+                    Or sign in via web browser
+                </button>
+            </div>
         </div>
 
         <!-- Transcription Progress Card (Shown when processing transcripts) -->

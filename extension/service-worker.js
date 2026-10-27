@@ -44,6 +44,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 async function getAuthHeaders(url) {
   const headers = {};
   try {
+    const syncData = await new Promise((r) => chrome.storage.sync.get(["authToken"], r));
+    if (syncData && syncData.authToken) {
+      headers["Authorization"] = `Bearer ${syncData.authToken}`;
+      return headers;
+    }
     if (chrome.cookies && chrome.cookies.get) {
       const cookie = await chrome.cookies.get({
         url: url,
@@ -54,7 +59,7 @@ async function getAuthHeaders(url) {
       }
     }
   } catch (err) {
-    console.warn("Could not read cookie in service worker:", err);
+    console.warn("Could not read credentials in service worker:", err);
   }
   return headers;
 }

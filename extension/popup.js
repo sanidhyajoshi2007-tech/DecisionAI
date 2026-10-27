@@ -84,10 +84,20 @@ document.addEventListener("DOMContentLoaded", async () => {
     });
   }
 
-  // Helper to read session cookie from the backend domain
+  // Quick Login DOM elements
+  const quickEmailInput = document.getElementById("quickEmailInput");
+  const quickLoginBtn = document.getElementById("quickLoginBtn");
+  const logoutBtn = document.getElementById("logoutBtn");
+
+  // Helper to read auth token from sync storage or session cookie from domain
   async function getAuthHeaders(url) {
     const headers = {};
     try {
+      const syncData = await new Promise((r) => chrome.storage.sync.get(["authToken"], r));
+      if (syncData && syncData.authToken) {
+        headers["Authorization"] = `Bearer ${syncData.authToken}`;
+        return headers;
+      }
       if (chrome.cookies && chrome.cookies.get) {
         const cookie = await chrome.cookies.get({
           url: url,
@@ -98,7 +108,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         }
       }
     } catch (err) {
-      console.warn("Could not read session cookie via chrome.cookies:", err);
+      console.warn("Could not read session credentials:", err);
     }
     return headers;
   }
@@ -126,6 +136,50 @@ document.addEventListener("DOMContentLoaded", async () => {
     }
   }
 
+  if (quickLoginBtn && quickEmailInput) {
+    quickLoginBtn.addEventListener("click", async () => {
+      const email = quickEmailInput.value.trim();
+      if (!email || !email.includes("@")) {
+        setStatus("Please enter a valid email address.", true);
+        return;
+      }
+      quickLoginBtn.disabled = true;
+      quickLoginBtn.innerHTML = "<span>Signing in...</span>";
+      setStatus("Signing in...", false);
+      try {
+        const res = await fetch(`${backendBase}/auth/login`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-DecisionAI-Client": "extension",
+          },
+          body: JSON.stringify({ email }),
+        });
+        if (!res.ok) {
+          const errData = await res.json().catch(() => ({}));
+          throw new Error(errData.detail || `Sign in failed (${res.status})`);
+        }
+        const data = await res.json();
+        if (data.token) {
+          await new Promise((r) => chrome.storage.sync.set({ authToken: data.token, authUser: data.user }, r));
+        }
+        window.location.reload();
+      } catch (err) {
+        console.error("Sign in error:", err);
+        setStatus(err.message || "Failed to sign in. Check server URL.", true);
+        quickLoginBtn.disabled = false;
+        quickLoginBtn.innerHTML = "<span>Sign In</span>";
+      }
+    });
+  }
+
+  if (logoutBtn) {
+    logoutBtn.addEventListener("click", async () => {
+      await new Promise((r) => chrome.storage.sync.remove(["authToken", "authUser"], r));
+      window.location.reload();
+    });
+  }
+
   if (openLoginBtn) {
     openLoginBtn.addEventListener("click", () => {
       chrome.tabs.create({ url: `${backendBase}/web/login.html` });
@@ -140,7 +194,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     if (accountCard) accountCard.classList.add("hidden");
     if (recordingControls) recordingControls.classList.add("hidden");
     if (transcriptionCard) transcriptionCard.classList.add("hidden");
-    setStatus("Please sign in to your DecisionAI account to record meetings.", false);
+    setStatus("Please sign in with your email to enable recording.", false);
     return;
   }
 
