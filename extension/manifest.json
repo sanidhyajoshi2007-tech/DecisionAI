@@ -7,7 +7,8 @@
     "tabCapture",
     "offscreen",
     "tabs",
-    "storage"
+    "storage",
+    "cookies"
   ],
   "host_permissions": [
     "https://meet.google.com/*",

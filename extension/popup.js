@@ -84,10 +84,31 @@ document.addEventListener("DOMContentLoaded", async () => {
     });
   }
 
+  // Helper to read session cookie from the backend domain
+  async function getAuthHeaders(url) {
+    const headers = {};
+    try {
+      if (chrome.cookies && chrome.cookies.get) {
+        const cookie = await chrome.cookies.get({
+          url: url,
+          name: "decisionai_session",
+        });
+        if (cookie && cookie.value) {
+          headers["Authorization"] = `Bearer ${cookie.value}`;
+        }
+      }
+    } catch (err) {
+      console.warn("Could not read session cookie via chrome.cookies:", err);
+    }
+    return headers;
+  }
+
   // 2. Check Authentication with Backend
   async function checkAuth() {
     try {
+      const authHeaders = await getAuthHeaders(backendBase);
       const res = await fetch(`${backendBase}/auth/me`, {
+        headers: authHeaders,
         credentials: "include",
       });
       if (res.ok) {
@@ -335,7 +356,9 @@ document.addEventListener("DOMContentLoaded", async () => {
       if (!mId) return;
       pollCount++;
       try {
+        const authHeaders = await getAuthHeaders(backendBase);
         const res = await fetch(`${backendBase}/api/meetings/${mId}`, {
+          headers: authHeaders,
           credentials: "include",
         });
         if (res.ok) {

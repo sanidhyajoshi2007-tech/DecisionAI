@@ -41,6 +41,24 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 });
 
+async function getAuthHeaders(url) {
+  const headers = {};
+  try {
+    if (chrome.cookies && chrome.cookies.get) {
+      const cookie = await chrome.cookies.get({
+        url: url,
+        name: "decisionai_session",
+      });
+      if (cookie && cookie.value) {
+        headers["Authorization"] = `Bearer ${cookie.value}`;
+      }
+    }
+  } catch (err) {
+    console.warn("Could not read cookie in service worker:", err);
+  }
+  return headers;
+}
+
 async function handleStartRecording(tabId, title, hasMicPermission, consentRecorded) {
   const { recordingState = "idle" } = await chrome.storage.session.get("recordingState");
 
@@ -55,11 +73,15 @@ async function handleStartRecording(tabId, title, hasMicPermission, consentRecor
     const config = await getBackendConfig();
     const backendBase = config.httpBase;
     const wsBase = config.wsBase;
+    const authHeaders = await getAuthHeaders(backendBase);
 
     // 1. Verify personal account authentication
     let authRes;
     try {
-      authRes = await fetch(`${backendBase}/auth/me`, { credentials: "include" });
+      authRes = await fetch(`${backendBase}/auth/me`, {
+        headers: authHeaders,
+        credentials: "include",
+      });
     } catch (netErr) {
       throw new Error(`Cannot reach backend at ${backendBase}. Make sure your server is running.`);
     }
@@ -74,6 +96,7 @@ async function handleStartRecording(tabId, title, hasMicPermission, consentRecor
       headers: {
         "Content-Type": "application/json",
         "X-DecisionAI-Client": "extension",
+        ...authHeaders,
       },
       credentials: "include",
       body: JSON.stringify({
@@ -188,7 +211,9 @@ async function handleRecordingFinished(meetingId) {
   if (meetingId) {
     for (let i = 0; i < 60; i++) {
       try {
+        const authHeaders = await getAuthHeaders(backendBase);
         const checkRes = await fetch(`${backendBase}/api/meetings/${meetingId}`, {
+          headers: authHeaders,
           credentials: "include",
         });
         if (checkRes.ok) {
