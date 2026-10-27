@@ -11,8 +11,11 @@
   ],
   "host_permissions": [
     "https://meet.google.com/*",
-    "http://localhost:8000/*"
+    "http://localhost:8000/*",
+    "https://*/*",
+    "http://*/*"
   ],
+
   "action": {
     "default_popup": "popup.html",
     "default_title": "DecisionAI Recorder",

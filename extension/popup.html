@@ -138,15 +138,32 @@
         <!-- Status & Feedback -->
         <div id="statusMessage" class="status-message"></div>
 
+        <!-- Server Configuration Drawer -->
+        <div id="serverSettingsCard" class="server-settings-card" style="margin-top: 10px; padding: 8px 12px; background: rgba(255, 255, 255, 0.03); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 8px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; cursor: pointer;" id="toggleServerSettingsBtn">
+                <span style="font-size: 11px; color: #94a3b8; font-weight: 500;">Server Settings</span>
+                <span id="serverSettingsChevron" style="font-size: 10px; color: #64748b;">▼</span>
+            </div>
+            <div id="serverSettingsBody" class="hidden" style="margin-top: 8px; display: flex; flex-direction: column; gap: 6px;">
+                <label style="font-size: 10px; color: #64748b;">Backend Server URL</label>
+                <div style="display: flex; gap: 6px;">
+                    <input type="text" id="customBackendUrlInput" placeholder="http://localhost:8000" style="flex: 1; font-size: 11px; padding: 4px 8px; background: #0f172a; border: 1px solid #334155; border-radius: 4px; color: #f1f5f9;">
+                    <button id="saveServerUrlBtn" type="button" style="padding: 4px 10px; font-size: 11px; background: #3b82f6; border: none; border-radius: 4px; color: white; cursor: pointer;">Save</button>
+                </div>
+            </div>
+        </div>
+
         <!-- Footer -->
         <footer class="popup-footer">
             <span class="backend-pill">
-                <span class="dot green"></span>
-                <span>Server Connected</span>
+                <span id="backendStatusDot" class="dot green"></span>
+                <span id="backendStatusText">Server Connected</span>
             </span>
         </footer>
     </div>
 
+    <script src="config.js"></script>
     <script src="popup.js"></script>
 </body>
 </html>
+

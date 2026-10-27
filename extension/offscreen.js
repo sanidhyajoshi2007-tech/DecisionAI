@@ -19,12 +19,17 @@ let isRecording = false;
 const bufferQueue = [];
 let reconnectTimer = null;
 
+let currentWsBase = "ws://localhost:8000";
+let currentHttpBase = "http://localhost:8000";
+
 // ASCII headers for binary framing: "TAB:" and "MIC:"
 const TAB_PREFIX = new Uint8Array([0x54, 0x41, 0x42, 0x3a]);
 const MIC_PREFIX = new Uint8Array([0x4d, 0x49, 0x43, 0x3a]);
 
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.type === "START_OFFSCREEN_CAPTURE") {
+    if (message.wsBase) currentWsBase = message.wsBase;
+    if (message.httpBase) currentHttpBase = message.httpBase;
     startCapture(message.streamId, message.meetingId, message.hasMicPermission, message.streamToken)
       .then(() => sendResponse({ success: true }))
       .catch((err) => {
@@ -33,6 +38,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       });
     return true; // Keep channel open for async response
   }
+
 
   if (message.type === "STOP_OFFSCREEN_CAPTURE") {
     stopCapture()
@@ -147,7 +153,7 @@ function connectWebSocket() {
   if (!isRecording || !currentMeetingId) return;
 
   const query = currentStreamToken ? `?token=${encodeURIComponent(currentStreamToken)}` : "";
-  const wsUrl = `ws://localhost:8000/ws/meetings/${currentMeetingId}${query}`;
+  const wsUrl = `${currentWsBase}/ws/meetings/${currentMeetingId}${query}`;
   socket = new WebSocket(wsUrl);
   socket.binaryType = "arraybuffer";
 
@@ -246,7 +252,7 @@ async function stopCapture() {
       if (currentStreamToken) {
         finishHeaders["Authorization"] = `Bearer ${currentStreamToken}`;
       }
-      const finishRes = await fetch(`http://localhost:8000/meetings/${currentMeetingId}/finish`, {
+      const finishRes = await fetch(`${currentHttpBase}/meetings/${currentMeetingId}/finish`, {
         method: "POST",
         headers: finishHeaders,
         credentials: "include",

@@ -8,8 +8,7 @@
  * 4. Creates offscreen document and starts audio capture & streaming.
  * 5. On finish, closes offscreen document and opens http://localhost:8000/meetings/{id}.
  */
-
-const BACKEND_BASE = "http://localhost:8000";
+importScripts("config.js");
 
 // Ensure initial state
 chrome.runtime.onInstalled.addListener(async () => {
@@ -53,12 +52,16 @@ async function handleStartRecording(tabId, title, hasMicPermission, consentRecor
   await chrome.storage.session.set({ recordingState: "starting" });
 
   try {
+    const config = await getBackendConfig();
+    const backendBase = config.httpBase;
+    const wsBase = config.wsBase;
+
     // 1. Verify personal account authentication
     let authRes;
     try {
-      authRes = await fetch(`${BACKEND_BASE}/auth/me`, { credentials: "include" });
+      authRes = await fetch(`${backendBase}/auth/me`, { credentials: "include" });
     } catch (netErr) {
-      throw new Error(`Cannot reach backend at ${BACKEND_BASE}. Make sure the FastAPI server is running.`);
+      throw new Error(`Cannot reach backend at ${backendBase}. Make sure your server is running.`);
     }
 
     if (!authRes.ok) {
@@ -66,7 +69,7 @@ async function handleStartRecording(tabId, title, hasMicPermission, consentRecor
     }
 
     // 2. Create meeting in backend scoped to authenticated user
-    const createRes = await fetch(`${BACKEND_BASE}/meetings`, {
+    const createRes = await fetch(`${backendBase}/meetings`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -114,6 +117,8 @@ async function handleStartRecording(tabId, title, hasMicPermission, consentRecor
       meetingId,
       streamToken,
       hasMicPermission,
+      wsBase,
+      httpBase: backendBase,
     });
 
     if (!captureRes || !captureRes.success) {
@@ -176,11 +181,14 @@ async function handleRecordingFinished(meetingId) {
   await chrome.action.setBadgeText({ text: "AI" });
   await chrome.action.setBadgeBackgroundColor({ color: "#4F78E3" });
 
+  const config = await getBackendConfig();
+  const backendBase = config.httpBase;
+
   // 3. Poll meeting status until AI transcription and post-processing finish
   if (meetingId) {
     for (let i = 0; i < 60; i++) {
       try {
-        const checkRes = await fetch(`${BACKEND_BASE}/api/meetings/${meetingId}`, {
+        const checkRes = await fetch(`${backendBase}/api/meetings/${meetingId}`, {
           credentials: "include",
         });
         if (checkRes.ok) {
@@ -208,5 +216,6 @@ async function handleRecordingFinished(meetingId) {
   await chrome.action.setBadgeText({ text: "" });
 
   // 6. Redirect user directly to the DecisionAI Dashboard
-  await chrome.tabs.create({ url: `${BACKEND_BASE}/web/index.html` });
+  await chrome.tabs.create({ url: `${backendBase}/web/index.html` });
 }
+

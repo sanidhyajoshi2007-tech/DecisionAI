@@ -37,27 +37,77 @@ document.addEventListener("DOMContentLoaded", async () => {
   const transcriptionBar = document.getElementById("transcriptionBar");
   const transcriptionStatus = document.getElementById("transcriptionStatus");
 
+  // Server Settings DOM elements
+  const toggleServerSettingsBtn = document.getElementById("toggleServerSettingsBtn");
+  const serverSettingsBody = document.getElementById("serverSettingsBody");
+  const serverSettingsChevron = document.getElementById("serverSettingsChevron");
+  const customBackendUrlInput = document.getElementById("customBackendUrlInput");
+  const saveServerUrlBtn = document.getElementById("saveServerUrlBtn");
+  const backendStatusDot = document.getElementById("backendStatusDot");
+  const backendStatusText = document.getElementById("backendStatusText");
+
   let timerInterval = null;
   let currentActiveMeetingId = null;
 
-  // 1. Check Authentication with Backend
+  // 1. Resolve dynamic backend configuration
+  const backendConfig = await getBackendConfig();
+  let backendBase = backendConfig.httpBase;
+
+  if (customBackendUrlInput) {
+    customBackendUrlInput.value = backendBase;
+  }
+
+  if (toggleServerSettingsBtn && serverSettingsBody) {
+    toggleServerSettingsBtn.addEventListener("click", () => {
+      const isHidden = serverSettingsBody.classList.contains("hidden");
+      if (isHidden) {
+        serverSettingsBody.classList.remove("hidden");
+        if (serverSettingsChevron) serverSettingsChevron.textContent = "▲";
+      } else {
+        serverSettingsBody.classList.add("hidden");
+        if (serverSettingsChevron) serverSettingsChevron.textContent = "▼";
+      }
+    });
+  }
+
+  if (saveServerUrlBtn && customBackendUrlInput) {
+    saveServerUrlBtn.addEventListener("click", async () => {
+      const newUrl = customBackendUrlInput.value.trim();
+      if (newUrl) {
+        saveServerUrlBtn.textContent = "Saving...";
+        await setCustomBackendUrl(newUrl);
+        saveServerUrlBtn.textContent = "Saved";
+        setTimeout(() => {
+          window.location.reload();
+        }, 400);
+      }
+    });
+  }
+
+  // 2. Check Authentication with Backend
   async function checkAuth() {
     try {
-      const res = await fetch("http://localhost:8000/auth/me", {
+      const res = await fetch(`${backendBase}/auth/me`, {
         credentials: "include",
       });
       if (res.ok) {
+        if (backendStatusDot) backendStatusDot.className = "dot green";
+        if (backendStatusText) backendStatusText.textContent = "Server Connected";
         return await res.json();
       }
+      if (backendStatusDot) backendStatusDot.className = "dot yellow";
+      if (backendStatusText) backendStatusText.textContent = "Not Signed In";
       return null;
     } catch {
+      if (backendStatusDot) backendStatusDot.className = "dot red";
+      if (backendStatusText) backendStatusText.textContent = "Server Offline";
       return null;
     }
   }
 
   if (openLoginBtn) {
     openLoginBtn.addEventListener("click", () => {
-      chrome.tabs.create({ url: "http://localhost:8000/web/login.html" });
+      chrome.tabs.create({ url: `${backendBase}/web/login.html` });
     });
   }
 
@@ -161,7 +211,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         if (transcriptionPercent) transcriptionPercent.textContent = "100%";
         if (transcriptionStatus) transcriptionStatus.textContent = "Complete! Redirecting to Dashboard...";
         setTimeout(() => {
-          chrome.tabs.create({ url: "http://localhost:8000/web/index.html" });
+          chrome.tabs.create({ url: `${backendBase}/web/index.html` });
           window.close();
         }, 500);
       } else {
@@ -285,7 +335,7 @@ document.addEventListener("DOMContentLoaded", async () => {
       if (!mId) return;
       pollCount++;
       try {
-        const res = await fetch(`http://localhost:8000/api/meetings/${mId}`, {
+        const res = await fetch(`${backendBase}/api/meetings/${mId}`, {
           credentials: "include",
         });
         if (res.ok) {
@@ -305,7 +355,7 @@ document.addEventListener("DOMContentLoaded", async () => {
             });
 
             setTimeout(() => {
-              chrome.tabs.create({ url: "http://localhost:8000/web/index.html" });
+              chrome.tabs.create({ url: `${backendBase}/web/index.html` });
               window.close();
             }, 600);
           } else if (data.status === "failed" || data.status === "error") {

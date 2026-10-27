@@ -8,6 +8,7 @@
 
 # === Audio Storage ===
 audio_storage/
+test_audio_storage/
 
 # === ChromaDB ===
 chroma_data/
