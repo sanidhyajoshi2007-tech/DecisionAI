@@ -34,6 +34,13 @@ class MultilingualEmbeddingFunction(EmbeddingFunction):
     def _get_model(self):
         if self._model is None and not self._init_failed:
             import os
+            # On cloud production or low-memory hosts (e.g. Render 512MB free tier),
+            # bypass heavy PyTorch / SentenceTransformers to prevent OOM crash.
+            if os.environ.get("APP_ENV") == "production" or os.environ.get("USE_LIGHTWEIGHT_EMBEDDINGS") == "1":
+                logger.info("Using lightweight 384-dimensional embeddings (low-memory production mode).")
+                self._init_failed = True
+                return None
+
             try:
                 from sentence_transformers import SentenceTransformer
                 # Load model locally; avoid hanging on unauthenticated network downloads
