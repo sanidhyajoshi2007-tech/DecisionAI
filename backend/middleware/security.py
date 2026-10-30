@@ -49,6 +49,17 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next: RequestResponseEndpoint) -> Response:
         response = await call_next(request)
 
+        # Build dynamic connect-src from the request's own origin
+        # This ensures CSP works for both localhost dev and cloud deployments
+        host_header = request.headers.get("host", "localhost:8000")
+        forwarded_proto = request.headers.get("x-forwarded-proto", "")
+        scheme = "https" if forwarded_proto == "https" or request.url.scheme == "https" else "http"
+        ws_scheme = "wss" if scheme == "https" else "ws"
+        base_url = f"{scheme}://{host_header}"
+        ws_url = f"{ws_scheme}://{host_header}"
+
+        connect_sources = f"'self' {base_url} {ws_url} ws://localhost:8000 ws://127.0.0.1:8000 http://localhost:8000 http://127.0.0.1:8000"
+
         # Content-Security-Policy: restrict source origins for scripts, styles, fonts, frames
         csp_directives = [
             "default-src 'self'",
@@ -56,7 +67,7 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
             "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
             "font-src 'self' https://fonts.gstatic.com data:",
             "img-src 'self' data: https:",
-            "connect-src 'self' ws://localhost:8000 ws://127.0.0.1:8000 http://localhost:8000 http://127.0.0.1:8000",
+            f"connect-src {connect_sources}",
             "frame-ancestors 'none'",
         ]
         response.headers["Content-Security-Policy"] = "; ".join(csp_directives)

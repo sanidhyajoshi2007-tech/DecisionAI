@@ -4,7 +4,7 @@
  * defaulting to http://localhost:8000 when not customized.
  */
 
-const DEFAULT_SERVER_URL = "http://localhost:8000";
+const DEFAULT_SERVER_URL = "https://decisionai-c9jc.onrender.com";
 
 function getBackendConfig() {
   return new Promise((resolve) => {

@@ -33,6 +33,13 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """Startup / shutdown lifecycle."""
     # Ensure audio storage directory exists
     settings.audio_storage_path  # property call creates the dir
+
+    # Auto-initialize database tables if they do not exist
+    from backend.database import engine
+    from backend.models import Base
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+
     print(f"[+] {settings.app_name} starting ({settings.app_env})")
     yield
     print(f"[-] {settings.app_name} shutting down")
