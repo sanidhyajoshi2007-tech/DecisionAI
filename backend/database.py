@@ -16,10 +16,10 @@ settings = get_settings()
 
 # echo=True in dev shows SQL in the console — helpful for debugging queries.
 engine = create_async_engine(
-    settings.database_url,
+    settings.resolved_database_url,
     echo=settings.debug,
     # SQLite needs this to allow concurrent readers.
-    connect_args={"check_same_thread": False} if "sqlite" in settings.database_url else {},
+    connect_args={"check_same_thread": False} if "sqlite" in settings.resolved_database_url else {},
 )
 
 # expire_on_commit=False so we can access attributes after commit

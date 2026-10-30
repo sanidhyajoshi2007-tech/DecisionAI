@@ -12,12 +12,15 @@ from contextlib import asynccontextmanager
 from collections.abc import AsyncGenerator
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import text
 
 from backend.config import get_settings
+from backend.database import get_db
 from backend.middleware import CSRFProtectionMiddleware, SecurityHeadersMiddleware
 from backend.routers import auth_router, meetings_router, rag_router, users_router
 
@@ -25,8 +28,6 @@ settings = get_settings()
 
 
 # ── Lifespan ─────────────────────────────────────────────
-# Replaces the deprecated @app.on_event("startup") pattern.
-# Anything before `yield` runs on startup; after `yield` runs on shutdown.
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
@@ -35,10 +36,14 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     settings.audio_storage_path  # property call creates the dir
 
     # Auto-initialize database tables if they do not exist
-    from backend.database import engine
-    from backend.models import Base
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
+    try:
+        from backend.database import engine
+        from backend.models import Base
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+        print(f"[+] Database tables verified/created at: {settings.resolved_database_url}")
+    except Exception as db_err:
+        print(f"[!] Database auto-init error: {db_err}")
 
     print(f"[+] {settings.app_name} starting ({settings.app_env})")
     yield
@@ -56,6 +61,24 @@ app = FastAPI(
     docs_url="/docs" if settings.debug else None,
     redoc_url=None,
 )
+
+
+# ── Global Error Logging Middleware / Handler ────────────
+
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    import traceback
+    tb = traceback.format_exc()
+    print(f"[!] ERROR on {request.method} {request.url.path}: {exc}\n{tb}")
+    if isinstance(exc, HTTPException):
+        return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
+    return JSONResponse(
+        status_code=500,
+        content={
+            "detail": f"{type(exc).__name__}: {str(exc)}",
+            "path": request.url.path,
+        },
+    )
 
 
 # ── Security & CORS Middlewares ──────────────────────────
@@ -87,6 +110,28 @@ async def health_check() -> dict[str, str]:
     Returns 200 if the server is alive. No auth required.
     """
     return {"status": "healthy", "app": settings.app_name}
+
+
+@app.get("/api/diag", tags=["system"])
+async def diagnostic_check(db: AsyncSession = Depends(get_db)) -> dict:
+    """
+    Database diagnostic endpoint to inspect table health.
+    """
+    try:
+        res = await db.execute(text("SELECT count(*) FROM users"))
+        count = res.scalar()
+        return {
+            "status": "healthy",
+            "database": "connected",
+            "user_count": count,
+            "resolved_db_url": settings.resolved_database_url.split("@")[-1],
+        }
+    except Exception as exc:
+        return {
+            "status": "error",
+            "error": f"{type(exc).__name__}: {str(exc)}",
+            "resolved_db_url": settings.resolved_database_url.split("@")[-1],
+        }
 
 
 # ── Routers ──────────────────────────────────────────────

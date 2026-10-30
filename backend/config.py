@@ -120,6 +120,23 @@ class Settings(BaseSettings):
         p.mkdir(parents=True, exist_ok=True)
         return p
 
+    @property
+    def resolved_database_url(self) -> str:
+        """Resolve sqlite relative paths to absolute project root path, and fix Postgres prefixes."""
+        url = self.database_url
+        if url.startswith("postgres://"):
+            return url.replace("postgres://", "postgresql+asyncpg://", 1)
+        if url.startswith("postgresql://") and not url.startswith("postgresql+"):
+            return url.replace("postgresql://", "postgresql+asyncpg://", 1)
+        if "sqlite" in url and ":///" in url:
+            prefix, path_part = url.split(":///", 1)
+            p = Path(path_part)
+            if not p.is_absolute():
+                base_dir = Path(__file__).resolve().parent.parent
+                abs_db = (base_dir / p).resolve()
+                return f"{prefix}:///{abs_db.as_posix()}"
+        return url
+
 
 @lru_cache()
 def get_settings() -> Settings:
