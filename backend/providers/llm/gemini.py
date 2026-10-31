@@ -54,7 +54,7 @@ class GeminiLLMProvider(LLMProvider):
 
     @property
     def model(self) -> str:
-        return self.settings.gemini_model or "gemini-3.5-flash"
+        return self.settings.gemini_model or "gemini-3.5-flash-lite"
 
     def is_available(self) -> bool:
         """Check if a valid GEMINI_API_KEY is configured."""

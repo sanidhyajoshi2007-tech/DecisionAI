@@ -63,8 +63,8 @@ class Settings(BaseSettings):
     
     # Gemini Audio STT and LLM
     gemini_api_key: str = ""
-    gemini_model: str = "gemini-3.5-flash"
-    gemini_transcription_model: str = "gemini-3.5-flash"
+    gemini_model: str = "gemini-3.5-flash-lite"
+    gemini_transcription_model: str = "gemini-3.5-flash-lite"
     
     # Sarvam AI STT (Hindi & Indian languages)
     sarvam_api_key: str = ""

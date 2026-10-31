@@ -39,7 +39,7 @@ class GeminiTranscriptionProvider(TranscriptionProvider):
 
     @property
     def model(self) -> str:
-        return self.settings.gemini_transcription_model or "gemini-3.8-flash"
+        return self.settings.gemini_transcription_model or "gemini-3.5-flash-lite"
 
     @property
     def name(self) -> str:
@@ -137,10 +137,19 @@ class GeminiTranscriptionProvider(TranscriptionProvider):
             "5. Return ONLY the JSON object. Do not wrap in markdown or explanation."
         )
 
-        models_to_try = [self.model]
-        for fallback in ["gemini-3.5-flash", "gemini-3.5-transcribe", "gemini-3.8-flash"]:
-            if fallback not in models_to_try:
-                models_to_try.append(fallback)
+        preferred = [self.model]
+        candidates = [
+            "gemini-3.5-flash-lite",
+            "gemini-flash-lite-latest",
+            "gemini-3.1-flash-lite",
+            "gemini-3.5-flash",
+            "gemini-3.8-flash",
+            "gemini-flash-latest",
+        ]
+        for c in candidates:
+            if c not in preferred:
+                preferred.append(c)
+        models_to_try = preferred
 
         payload = {
             "contents": [
@@ -172,17 +181,13 @@ class GeminiTranscriptionProvider(TranscriptionProvider):
                     if resp.status_code == 200:
                         data = resp.json()
                         break
-                    elif resp.status_code in (503, 429, 404):
+                    else:
                         logger.warning(
-                            f"Model '{candidate_model}' returned {resp.status_code}. "
+                            f"Model '{candidate_model}' returned {resp.status_code}: {resp.text[:120]}. "
                             f"Trying fallback model..."
                         )
                         last_error = f"Gemini API error ({resp.status_code}): {resp.text}"
                         continue
-                    else:
-                        resp_text = resp.text
-                        logger.error(f"Gemini API error ({resp.status_code}): {resp_text}")
-                        raise RuntimeError(f"Gemini API error ({resp.status_code}): {resp_text}")
                 except httpx.RequestError as req_err:
                     last_error = f"Request error: {req_err}"
                     continue
@@ -204,7 +209,12 @@ class GeminiTranscriptionProvider(TranscriptionProvider):
         detected_language = language
 
         try:
-            parsed = json.loads(raw_text)
+            clean_json_str = raw_text.strip()
+            if "```json" in clean_json_str:
+                clean_json_str = clean_json_str.split("```json")[1].split("```")[0].strip()
+            elif "```" in clean_json_str:
+                clean_json_str = clean_json_str.split("```")[1].split("```")[0].strip()
+            parsed = json.loads(clean_json_str)
             detected_language = parsed.get("detected_language", language)
             raw_segments = parsed.get("segments", [])
             for seg in raw_segments:
