@@ -159,7 +159,7 @@
       if (userSlot) {
         if (user && user.email) {
           userSlot.innerHTML = `
-            <span style="font-size: var(--text-xs); color: var(--text-secondary);">${user.name || user.email}</span>
+            <span style="font-size: var(--text-xs); color: var(--text-secondary);">${formatUserDisplayName(user)}</span>
             <button id="logout-btn" class="btn btn-secondary btn-sm" type="button">Logout</button>
           `;
           document.getElementById('logout-btn')?.addEventListener('click', API.logout);

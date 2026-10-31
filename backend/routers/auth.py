@@ -278,8 +278,13 @@ async def logout(
 )
 async def get_my_profile(
     current_user: User = Depends(get_required_user),
+    db: AsyncSession = Depends(get_db),
 ) -> UserResponse:
-    """Returns profile for currently logged in user."""
+    """Returns profile for currently logged in user, deriving display name from email if needed."""
+    from backend.crud.users import extract_name_from_email
+    if not current_user.name or current_user.name == "Dev User":
+        current_user.name = extract_name_from_email(current_user.email)
+        await db.flush()
     return UserResponse.model_validate(current_user)
 
 

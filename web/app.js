@@ -71,6 +71,23 @@ function getCsrfToken() {
   return match ? decodeURIComponent(match[2]) : '';
 }
 
+// User Display Name Helper - Picks and formats display name from user profile or email
+function formatUserDisplayName(user) {
+  if (!user) return 'User';
+  if (user.name && user.name !== 'Dev User' && user.name.trim() !== '') {
+    return user.name;
+  }
+  if (user.email) {
+    const local = user.email.split('@')[0];
+    const cleaned = local.replace(/[._\-+0-9]+/g, ' ').trim();
+    if (cleaned) {
+      return cleaned.split(' ').map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()).join(' ');
+    }
+    return local.charAt(0).toUpperCase() + local.slice(1);
+  }
+  return 'User';
+}
+
 // API Client
 const API = {
   async fetchCurrentUser() {
@@ -339,7 +356,7 @@ async function initDashboardPage() {
   const userSlot = document.getElementById('user-profile-slot');
   if (userSlot) {
     userSlot.innerHTML = `
-      <span style="font-size: var(--text-xs); color: var(--text-secondary);">${escapeHtml(user.name || user.email)}</span>
+      <span style="font-size: var(--text-xs); color: var(--text-secondary);">${escapeHtml(formatUserDisplayName(user))}</span>
       <a href="/web/settings.html" class="btn btn-secondary btn-sm">Settings</a>
       <a href="/web/privacy.html" class="btn btn-secondary btn-sm">Privacy</a>
       <button id="logout-btn" class="btn btn-secondary btn-sm" type="button">Logout</button>
@@ -549,7 +566,7 @@ async function initMeetingPage() {
   const userSlot = document.getElementById('user-profile-slot');
   if (userSlot) {
     userSlot.innerHTML = `
-      <span style="font-size: var(--text-xs); color: var(--text-secondary);">${escapeHtml(user.name || user.email)}</span>
+      <span style="font-size: var(--text-xs); color: var(--text-secondary);">${escapeHtml(formatUserDisplayName(user))}</span>
       <button id="logout-btn" class="btn btn-secondary btn-sm" type="button">Logout</button>
     `;
     document.getElementById('logout-btn')?.addEventListener('click', API.logout);
@@ -1009,7 +1026,7 @@ async function initAskAIPage() {
   const userSlot = document.getElementById('user-profile-slot');
   if (userSlot) {
     userSlot.innerHTML = `
-      <span style="font-size: var(--text-xs); color: var(--text-secondary);">${escapeHtml(user.name || user.email)}</span>
+      <span style="font-size: var(--text-xs); color: var(--text-secondary);">${escapeHtml(formatUserDisplayName(user))}</span>
       <button id="logout-btn" class="btn btn-secondary btn-sm" type="button">Logout</button>
     `;
     document.getElementById('logout-btn')?.addEventListener('click', API.logout);
@@ -1203,7 +1220,7 @@ async function initSettingsPage() {
   const userSlot = document.getElementById('user-profile-slot');
   if (userSlot) {
     userSlot.innerHTML = `
-      <span style="font-size: var(--text-xs); color: var(--text-secondary);">${escapeHtml(user.name || user.email)}</span>
+      <span style="font-size: var(--text-xs); color: var(--text-secondary);">${escapeHtml(formatUserDisplayName(user))}</span>
       <a href="/web/privacy.html" class="btn btn-secondary btn-sm">Privacy</a>
       <button id="logout-btn" class="btn btn-secondary btn-sm" type="button">Logout</button>
     `;

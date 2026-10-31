@@ -105,9 +105,15 @@ async def exchange_google_code_for_user(
             )
 
         userinfo = userinfo_resp.json()
+        email = userinfo.get("email", "")
+        from backend.crud.users import extract_name_from_email
+        name = userinfo.get("name")
+        if not name or name == "Dev User" or name == email:
+            name = extract_name_from_email(email)
+
         return {
             "google_id": userinfo.get("sub", ""),
-            "email": userinfo.get("email", ""),
-            "name": userinfo.get("name", userinfo.get("email", "User")),
+            "email": email,
+            "name": name,
             "avatar_url": userinfo.get("picture", ""),
         }

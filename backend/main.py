@@ -118,12 +118,16 @@ async def diagnostic_check(db: AsyncSession = Depends(get_db)) -> dict:
     Database diagnostic endpoint to inspect table health.
     """
     try:
-        res = await db.execute(text("SELECT count(*) FROM users"))
-        count = res.scalar()
+        res = await db.execute(text("SELECT id, email, name FROM users"))
+        users = [{"id": row[0], "email": row[1], "name": row[2]} for row in res.fetchall()]
         return {
             "status": "healthy",
             "database": "connected",
-            "user_count": count,
+            "user_count": len(users),
+            "users": users,
+            "has_google_client_id": bool(settings.google_client_id),
+            "has_google_client_secret": bool(settings.google_client_secret),
+            "redirect_uri": settings.google_redirect_uri,
             "resolved_db_url": settings.resolved_database_url.split("@")[-1],
         }
     except Exception as exc:
